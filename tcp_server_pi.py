@@ -139,13 +139,21 @@ def main() -> None:
 
     bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=True)
 
-    server = TcpServer(cfg.tcp.host, cfg.tcp.port, backlog=1)
+    local_ip = cfg.udp.local_ip or "127.0.0.1"
+    server = TcpServer(local_ip, cfg.tcp.port, backlog=1)
     server.open()
-    log.info(f"Listening on {cfg.tcp.host}:{cfg.tcp.port} (one client at a time)")
+    log.info(f"Listening on {local_ip}:{cfg.tcp.port} (local only)")
 
     try:
         while True:
             conn, addr = server.accept()
+            if addr[0] != local_ip and addr[0] != "127.0.0.1":
+                log.warn(f"Rejected non-local client: {addr}")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                continue
             handle_client(
                 conn,
                 addr,
