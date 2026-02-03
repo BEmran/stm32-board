@@ -39,7 +39,8 @@ DEFAULT_TEST_BEEP_PERIOD = 30
 @dataclass
 class TcpConfig:
     host: str
-    port: int
+    state_port: int
+    cmd_port: int
 
 
 @dataclass
@@ -142,7 +143,10 @@ def load_config_options() -> ConfigOptions:
     cfg = load_config()
 
     tcp_host = _get(cfg, "tcp", "host", DEFAULT_TCP_HOST) or DEFAULT_TCP_HOST
-    tcp_port = _getint(cfg, "tcp", "port", DEFAULT_TCP_PORT)
+    tcp_state_port = _getint(cfg, "tcp", "state_port", None)
+    if tcp_state_port is None:
+        tcp_state_port = _getint(cfg, "tcp", "port", DEFAULT_TCP_PORT)
+    tcp_cmd_port = _getint(cfg, "tcp", "cmd_port", DEFAULT_TCP_PORT + 1)
 
     linux_port = _get(cfg, "rosmaster", "linux_port", None)
     if linux_port is None:
@@ -192,7 +196,7 @@ def load_config_options() -> ConfigOptions:
     beep_period = _getint(cfg, "test_client", "beep_period", DEFAULT_TEST_BEEP_PERIOD)
 
     return ConfigOptions(
-        tcp=TcpConfig(host=tcp_host, port=tcp_port),
+        tcp=TcpConfig(host=tcp_host, state_port=tcp_state_port, cmd_port=tcp_cmd_port),
         rosmaster=RosmasterConfig(linux_port=linux_port, windows_port=windows_port, baud=baud),
         recorder=RecorderConfig(recorder_dir=recorder_dir, recorder_prefix=recorder_prefix),
         logging=LoggingConfig(

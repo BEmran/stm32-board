@@ -29,21 +29,21 @@ def _maybe_print(last_printed: float, now: float, fn) -> float:
         return now
     return last_printed
 
-def handle_client(
-    conn: socket.socket,
-    addr: Tuple[str, int],
+def _state_publisher_loop(
+    server: TcpServer,
     bot: Rosmaster,
     state_hz: float,
     cmd_timeout_s: float,
     recorder_dir: str,
     recorder_prefix: str,
 ) -> None:
-    log.info(f"Client connected: {addr}")
+    log.info("State publisher listening")
+    conn, addr = server.accept()
+    log.info(f"State client connected: {addr}")
 
     set_low_latency(conn)
     set_buffers(conn)
 
-    lock = threading.Lock()
     last_cmd_time = time.time()
     last_cmd = Actions()
     state_seq = 0
@@ -51,30 +51,6 @@ def handle_client(
 
     state_q = queue.Queue(maxsize=RECORDER_QUEUE_MAX)
     cmd_q = queue.Queue(maxsize=RECORDER_QUEUE_MAX)
-
-    def rx_cmd_loop() -> None:
-        nonlocal last_cmd_time, last_cmd
-        last_printed = 0.0
-        try:
-            while not stop_event.is_set():
-                pkt = recv_exact(conn, CMD_STRUCT.size)
-                cmd = parse_cmd_pkt(pkt)
-                with lock:
-                    last_cmd_time = time.time()
-                    last_cmd = cmd
-                    apply_actions(bot, cmd)
-
-                t_wall = time.time()
-                t_mono = time.perf_counter()
-                try:
-                    cmd_q.put_nowait((t_wall, t_mono, cmd))
-                except queue.Full:
-                    pass
-
-                last_printed = _maybe_print(last_printed, t_mono, lambda: print_actions(cmd))
-        except Exception as exc:
-            log.error(f"RX stopped: {exc}")
-            stop_event.set()
 
     def tx_state_loop() -> None:
         nonlocal last_cmd_time, last_cmd, state_seq
@@ -90,11 +66,10 @@ def handle_client(
                 next_time += dt
 
                 if cmd_timeout_s > 0:
-                    with lock:
-                        age = time.time() - last_cmd_time
-                        if age > cmd_timeout_s:
-                            log.warn("No CMD received for %.2f s, stopping motors" % age)
-                            apply_actions(bot, Actions())
+                    age = time.time() - last_cmd_time
+                    if age > cmd_timeout_s:
+                        log.warn("No CMD received for %.2f s, stopping motors" % age)
+                        apply_actions(bot, Actions())
 
                 state = read_state(bot)
                 state_seq += 1
@@ -111,27 +86,36 @@ def handle_client(
 
                 last_printed = _maybe_print(last_printed, now, lambda: print_states(state))
         except Exception as exc:
-            log.error(f"TX stopped: {exc}")
+            log.error(f"STATE TX stopped: {exc}")
             stop_event.set()
 
-    t_rx = threading.Thread(target=rx_cmd_loop, daemon=True)
-    t_tx = threading.Thread(target=tx_state_loop, daemon=True)
-    t_rx.start()
-    t_tx.start()
+    def rx_cmd_loop(cmd_conn: socket.socket) -> None:
+        nonlocal last_cmd_time, last_cmd
+        last_printed = 0.0
+        try:
+            while not stop_event.is_set():
+                pkt = recv_exact(cmd_conn, CMD_STRUCT.size)
+                cmd = parse_cmd_pkt(pkt)
+                last_cmd_time = time.time()
+                last_cmd = cmd
+                apply_actions(bot, cmd)
+
+                t_wall = time.time()
+                t_mono = time.perf_counter()
+                try:
+                    cmd_q.put_nowait((t_wall, t_mono, cmd))
+                except queue.Full:
+                    pass
+
+                last_printed = _maybe_print(last_printed, t_mono, lambda: print_actions(cmd))
+        except Exception as exc:
+            log.error(f"CMD RX stopped: {exc}")
+            stop_event.set()
 
     recorder = QueueRecorder(recorder_dir, state_q, cmd_q, prefix=recorder_prefix)
     recorder.start()
 
-    while not stop_event.is_set():
-        time.sleep(IDLE_SLEEP_S)
-
-    try:
-        conn.close()
-    except Exception:
-        pass
-    recorder.stop()
-    recorder.join()
-    log.info(f"Client disconnected: {addr}")
+    return conn, stop_event, tx_state_loop, rx_cmd_loop, recorder
 
 def main() -> None:
     cfg = load_config_options()
@@ -140,29 +124,44 @@ def main() -> None:
     bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=True)
 
     local_ip = cfg.udp.local_ip or "127.0.0.1"
-    server = TcpServer(local_ip, cfg.tcp.port, backlog=1)
-    server.open()
-    log.info(f"Listening on {local_ip}:{cfg.tcp.port} (local only)")
+    state_server = TcpServer(local_ip, cfg.tcp.state_port, backlog=1)
+    cmd_server = TcpServer(local_ip, cfg.tcp.cmd_port, backlog=1)
+    state_server.open()
+    cmd_server.open()
+    log.info(f"State TX on {local_ip}:{cfg.tcp.state_port} (local only)")
+    log.info(f"CMD RX on {local_ip}:{cfg.tcp.cmd_port} (local only)")
 
     try:
         while True:
-            conn, addr = server.accept()
-            if addr[0] != local_ip and addr[0] != "127.0.0.1":
-                log.warn(f"Rejected non-local client: {addr}")
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                continue
-            handle_client(
-                conn,
-                addr,
+            state_conn, stop_event, tx_state_loop, rx_cmd_loop, recorder = _state_publisher_loop(
+                state_server,
                 bot,
                 cfg.timing.state_hz,
                 cfg.timing.cmd_timeout_s,
                 cfg.recorder.recorder_dir,
                 cfg.recorder.recorder_prefix,
             )
+            cmd_conn, cmd_addr = cmd_server.accept()
+            log.info(f"CMD client connected: {cmd_addr}")
+
+            t_tx = threading.Thread(target=tx_state_loop, daemon=True)
+            t_rx = threading.Thread(target=rx_cmd_loop, args=(cmd_conn,), daemon=True)
+            t_tx.start()
+            t_rx.start()
+
+            while not stop_event.is_set():
+                time.sleep(IDLE_SLEEP_S)
+
+            try:
+                state_conn.close()
+            except Exception:
+                pass
+            try:
+                cmd_conn.close()
+            except Exception:
+                pass
+            recorder.stop()
+            recorder.join()
             log.info("Waiting for next client...")
     except KeyboardInterrupt:
         log.info("Shutting down")
