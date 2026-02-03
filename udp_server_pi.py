@@ -40,9 +40,10 @@ def _maybe_print(last_printed: float, now: float, fn) -> float:
 
 
 def _select_rx_ip(cfg) -> str:
-    if cfg.udp.rpi_ip:
-        return cfg.udp.rpi_ip
-    return cfg.udp.local_ip
+    # RX must bind to a local interface (or 0.0.0.0)
+    if cfg.udp.local_ip:
+        return cfg.udp.local_ip
+    return "0.0.0.0"
 
 
 def _select_tx_ip(cfg) -> str:
