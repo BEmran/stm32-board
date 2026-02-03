@@ -37,7 +37,7 @@ def main() -> None:
 
     cfg = load_config_options()
     host = cfg.udp.local_ip or "127.0.0.1"
-    port = cfg.tcp.port
+    port = cfg.tcp.state_port
 
     while True:
         try:
