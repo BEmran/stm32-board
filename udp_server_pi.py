@@ -55,7 +55,6 @@ def _select_tx_ip(cfg) -> str:
 def run_server(
     bot: Rosmaster,
     state_hz: float,
-    tx_hz: float,
     cmd_timeout_s: float,
     recorder_dir: str,
     recorder_prefix: str,
@@ -68,16 +67,13 @@ def run_server(
 
     udp_rx = UDPRxSockets(ip=rx_ip, port=rx_port)
     udp_tx = UDPTxSockets(ip=tx_ip, port=tx_port)
-    log.info(f"UDP RX bound to {rx_ip}:{rx_port}, TX to {tx_ip}:{tx_port} at {tx_hz:.2f} Hz")
+    log.info(f"UDP RX bound to {rx_ip}:{rx_port}, TX to {tx_ip}:{tx_port} at {state_hz:.2f} Hz")
 
     lock = threading.Lock()
     last_cmd_time = time.time()
     last_cmd = Actions()
     state_seq = 0
     stop_event = threading.Event()
-    latest_state = None
-    latest_state_mono = 0.0
-
     state_q = queue.Queue(maxsize=RECORDER_QUEUE_MAX)
     cmd_q = queue.Queue(maxsize=RECORDER_QUEUE_MAX)
 
@@ -108,8 +104,8 @@ def run_server(
             log.error(f"RX stopped: {exc}")
             stop_event.set()
 
-    def state_collect_loop() -> None:
-        nonlocal last_cmd_time, last_cmd, state_seq, latest_state, latest_state_mono
+    def state_loop() -> None:
+        nonlocal last_cmd_time, last_cmd, state_seq
         dt = 1.0 / state_hz
         next_time = time.perf_counter()
         last_printed = 0.0
@@ -132,9 +128,8 @@ def run_server(
                 state_seq += 1
                 state.seq = state_seq
                 t_mono = time.perf_counter()
-                with lock:
-                    latest_state = state
-                    latest_state_mono = t_mono
+                pkt = prepare_state_pkt(state, t_mono)
+                udp_tx.send_pkt(pkt)
 
                 t_wall = time.time()
                 try:
@@ -147,34 +142,10 @@ def run_server(
             log.error(f"STATE loop stopped: {exc}")
             stop_event.set()
 
-    def tx_state_loop() -> None:
-        nonlocal latest_state, latest_state_mono
-        dt = 1.0 / tx_hz if tx_hz > 0 else 0.1
-        next_time = time.perf_counter()
-        try:
-            while not stop_event.is_set():
-                now = time.perf_counter()
-                if now < next_time:
-                    time.sleep(next_time - now)
-                    continue
-                next_time += dt
-                with lock:
-                    state = latest_state
-                    t_mono = latest_state_mono
-                if state is None:
-                    continue
-                pkt = prepare_state_pkt(state, t_mono)
-                udp_tx.send_pkt(pkt)
-        except Exception as exc:
-            log.error(f"TX loop stopped: {exc}")
-            stop_event.set()
-
     t_rx = threading.Thread(target=rx_cmd_loop, daemon=True)
-    t_state = threading.Thread(target=state_collect_loop, daemon=True)
-    t_tx = threading.Thread(target=tx_state_loop, daemon=True)
+    t_state = threading.Thread(target=state_loop, daemon=True)
     t_rx.start()
     t_state.start()
-    t_tx.start()
 
     recorder = QueueRecorder(recorder_dir, state_q, cmd_q, prefix=recorder_prefix)
     recorder.start()
@@ -197,7 +168,6 @@ def main() -> None:
         run_server(
             bot,
             cfg.timing.state_hz,
-            cfg.timing.rate_hz,
             cfg.timing.cmd_timeout_s,
             cfg.recorder.recorder_dir,
             cfg.recorder.recorder_prefix,
