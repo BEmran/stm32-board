@@ -3,8 +3,7 @@
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable
 
 import logger as log
 from config_options import load_config_options
@@ -78,7 +77,6 @@ def run_server(
     udp_tx = UDPTxSockets(ip=tx_ip, port=tx_port)
     log.info(f"UDP RX bound to {rx_ip}:{rx_port}, TX to {tx_ip}:{tx_port} at {tx_hz:.2f} Hz")
 
-    tx_seq = 0
     stop_event = threading.Event()
     tx_que = MyQueue(maxsize=DEFAULT_RECORDER_QUEUE_MAX)
     rx_que = MyQueue(maxsize=DEFAULT_RECORDER_QUEUE_MAX)
@@ -100,7 +98,6 @@ def run_server(
             stop_event.set()
 
     def tx_loop() -> None:
-        nonlocal tx_seq
         dt = 1.0 / tx_hz
         next_time = time.perf_counter()
         try:
@@ -145,7 +142,7 @@ def run_server(
     recorder.join()
 
 
-class HandleState ():
+class HandleState:
     def __init__(self, bot: Rosmaster,  print_interval_s: float):
         self.last_printed = 0.0
         self.seq = 0
@@ -161,7 +158,7 @@ class HandleState ():
         self.last_printed = _maybe_print(self.last_printed, lambda: print_states(state), self.print_interval_s)
         return pkt, state
     
-class HandleActions ():
+class HandleActions:
     def __init__(self, bot: Rosmaster,  print_interval_s: float,  cmd_timeout_s: float):
         self.last_printed = 0.0
         self.print_interval_s = print_interval_s
@@ -197,8 +194,8 @@ def main() -> None:
     server_cfg = build_udp_server_config(cfg)
 
     bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=True)
-    handle_state = HandleState (bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
-    handle_actions = HandleActions (bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S, cmd_timeout_s=cfg.timing.cmd_timeout_s)
+    handle_state = HandleState(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
+    handle_actions = HandleActions(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S, cmd_timeout_s=cfg.timing.cmd_timeout_s)
     log.info("UDP server starting")
     try:
         run_server(
