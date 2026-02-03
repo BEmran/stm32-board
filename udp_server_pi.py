@@ -65,10 +65,14 @@ def run_server(
     rx_port = cfg.udp.cmd_port
     tx_ip = _select_tx_ip(cfg)
     tx_port = cfg.udp.state_port
+    local_tx_ip = cfg.udp.local_ip or "127.0.0.1"
 
     udp_rx = UDPRxSockets(ip=rx_ip, port=rx_port)
-    udp_tx = UDPTxSockets(ip=tx_ip, port=tx_port)
-    log.info(f"UDP RX bound to {rx_ip}:{rx_port}, TX to {tx_ip}:{tx_port} at {tx_hz:.2f} Hz")
+    udp_tx_remote = UDPTxSockets(ip=tx_ip, port=tx_port)
+    udp_tx_local = UDPTxSockets(ip=local_tx_ip, port=tx_port)
+    log.info(
+        f"UDP RX bound to {rx_ip}:{rx_port}, TX to {local_tx_ip}:{tx_port} and {tx_ip}:{tx_port} at {tx_hz:.2f} Hz"
+    )
 
     lock = threading.Lock()
     last_cmd_time = time.time()
@@ -166,7 +170,8 @@ def run_server(
                 if state is None:
                     continue
                 pkt = prepare_state_pkt(state, t_mono)
-                udp_tx.send_pkt(pkt)
+                udp_tx_local.send_pkt(pkt)
+                udp_tx_remote.send_pkt(pkt)
         except Exception as exc:
             log.error(f"TX loop stopped: {exc}")
             stop_event.set()
