@@ -10,7 +10,7 @@ import logger as log
 from my_Rosmaster import Rosmaster, apply_actions, initialize_rosmaster, read_state
 from protocol import Actions, CMD_STRUCT, parse_cmd_pkt, prepare_state_pkt, print_actions, print_states
 from queue_recorder import QueueRecorder
-from other.tcp import TcpServer, recv_exact, set_buffers, set_low_latency
+from tcp import TcpServer, recv_exact, set_buffers, set_low_latency
 
 PRINT_INTERVAL_S = 1.0
 RECORDER_QUEUE_MAX = 5000
