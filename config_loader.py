@@ -1,29 +1,16 @@
 import configparser
 from pathlib import Path
 
-DEFAULT_TCP_HOST = "0.0.0.0"
-DEFAULT_TCP_PORT = 30001
-
-DEFAULT_LINUX_COM_PORT = "/dev/ttyUSB0"
-DEFAULT_STATE_RATE = 100.0  # Hz
-DEFAULT_CMD_TIMEOUT_S = 0.5  # seconds
-
-
-DEFAULT_DURATION = 0.0  # seconds (0 = run forever)
-DEFAULT_OUTDIR = "./logs"
-DEFAULT_PREFIX = "run"
-DEFAULT_STATE_IP = "127.0.0.1"
-DEFAULT_STATE_PORT = 20001 
-DEFAULT_CMD_IP = "127.0.0.1"
-DEFAULT_CMD_PORT = 20002
-
 CFG_PATH = Path(__file__).resolve().parent / "config.ini"
 
 def load_config(verbose: bool = False) -> configparser.ConfigParser:
     if not CFG_PATH.exists():
         raise FileNotFoundError(f"Missing config file: {CFG_PATH}")
 
-    cfg = configparser.ConfigParser(interpolation=None)
+    cfg = configparser.ConfigParser(
+        interpolation=None,
+        inline_comment_prefixes=("#", ";"),
+    )
 
     # IMPORTANT: utf-8-sig handles Windows BOM correctly
     with CFG_PATH.open("r", encoding="utf-8-sig") as f:

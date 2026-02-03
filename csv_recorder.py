@@ -1,17 +1,38 @@
-
+#csv_recorder.py
 import csv
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Dict, Iterable
+
+import logger as log
 from protocol import Actions, State
 
 ActionsHeader = ["t_epoch_s", "t_mono_s", "m1", "m2", "m3", "m4", "beep_ms", "flags"]
-StateHeader = ["t_epoch_s", "t_mono_s", "ax", "ay", "az","gx","gy","gz","mx","my","mz","roll_deg","pitch_deg","yaw_deg","enc1","enc2","enc3","enc4",]
+StateHeader = [
+    "t_epoch_s",
+    "t_mono_s",
+    "ax",
+    "ay",
+    "az",
+    "gx",
+    "gy",
+    "gz",
+    "mx",
+    "my",
+    "mz",
+    "roll_deg",
+    "pitch_deg",
+    "yaw_deg",
+    "enc1",
+    "enc2",
+    "enc3",
+    "enc4",
+]
 
-def actions_to_dict(time: float, now_mono:float, actions:Actions):
+def actions_to_dict(t_wall_s: float, t_mono_s: float, actions: Actions) -> Dict[str, object]:
     row = {
-        "t_epoch_s": f"{time:.6f}",
-        "t_mono_s": f"{now_mono:.6f}",
+        "t_epoch_s": f"{t_wall_s:.6f}",
+        "t_mono_s": f"{t_mono_s:.6f}",
         "m1": int(actions.motors.m1),
         "m2": int(actions.motors.m2),
         "m3": int(actions.motors.m3),
@@ -21,10 +42,10 @@ def actions_to_dict(time: float, now_mono:float, actions:Actions):
     }
     return row
 
-def state_to_dict(time: float, now_mono:float, state:State):
+def state_to_dict(t_wall_s: float, t_mono_s: float, state: State) -> Dict[str, object]:
     row = {
-        "t_epoch_s": f"{time:.6f}",
-        "t_mono_s": f"{now_mono:.6f}",
+        "t_epoch_s": f"{t_wall_s:.6f}",
+        "t_mono_s": f"{t_mono_s:.6f}",
         "ax": f"{state.imu.acc.x:.6f}",
         "ay": f"{state.imu.acc.y:.6f}",
         "az": f"{state.imu.acc.z:.6f}",
@@ -44,42 +65,45 @@ def state_to_dict(time: float, now_mono:float, state:State):
     }
     return row
 
-class CSVLogger:
-    def __init__(self, logdir: str, prefix: str, header: list):
-        self.csv_path = self.create_csv(logdir, prefix)
-        self.file = None
-        self.state_writer = None
-        self.cmd_writer = None
-        self.header = header
+class CSVRecorder:
+    def __init__(self, recorderdir: str, prefix: str, header: Iterable[str]):
+        self.header = list(header)
+        self.csv_path = self._build_path(recorderdir, prefix)
+        self._file = None
+        self._writer = None
         
-    def create_csv(self, logdir, prefix: str):
+    def _build_path(self, recorderdir: str, prefix: str) -> str:
         stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        os.makedirs(logdir, exist_ok=True)
-        csv_path = os.path.join(logdir, f"{prefix}_{stamp}.csv")
-        print(f"[INFO] Logging STATE to: {csv_path}")
+        os.makedirs(recorderdir, exist_ok=True)
+        filename = f"{prefix}_{stamp}.csv" if prefix else f"{stamp}.csv"
+        csv_path = os.path.join(recorderdir, filename)
+        log.info(f"Recording to: {csv_path}")
         return csv_path
     
-    def write_header(self):
-        self.writer = csv.DictWriter(self.file, fieldnames=self.header)
-        self.writer.writeheader()
+    def open(self) -> "CSVRecorder":
+        if self._file is not None:
+            return self
+        self._file = open(self.csv_path, "w", newline="", buffering=1, encoding="utf-8")
+        self._writer = csv.DictWriter(self._file, fieldnames=self.header)
+        self._writer.writeheader()
+        return self
 
-    def log(self, raw_dict: dict):
-        # Use line-buffered writes for safer logs (still efficient at 100 Hz)
-        self.writer.writerow(raw_dict)
+    def record(self, raw_dict: Dict[str, object]) -> None:
+        if self._writer is None:
+            raise RuntimeError("CSVRecorder is not open. Use 'with CSVRecorder(...)' or call open().")
+        self._writer.writerow(raw_dict)
 
     def __enter__(self):
-        """Sets up the 'with' block context."""
-        self.file = open(self.csv_path, "w", newline="", buffering=1)
-        self.write_header()
-        return self  # This is what 'as logger' receives
+        return self.open()
     
-    def close_log(self):
-        if hasattr(self, 'file') and not self.file.closed:
-            self.file.close()
+    def close(self) -> None:
+        if self._file is not None and not self._file.closed:
+            self._file.close()
+        self._file = None
+        self._writer = None
 
-    # Automatically runs when the object is garbage collected
     def __del__(self):
-        self.close_log()
+        self.close()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close_log()
+        self.close()
