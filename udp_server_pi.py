@@ -52,7 +52,7 @@ def build_udp_server_config(cfg) -> UdpServerConfig:
         rx_port=cfg.udp.cmd_port,
         tx_ip=cfg.udp.local_ip or "127.0.0.1",
         tx_port=cfg.udp.state_port,
-        state_hz=cfg.timing.state_hz,
+        tx_hz=cfg.timing.state_hz,
         recorder_dir=cfg.recorder.recorder_dir,
         recorder_prefix=cfg.recorder.recorder_prefix,
         idle_sleep_s=DEFAULT_IDLE_SLEEP_S,
@@ -120,8 +120,6 @@ def run_server(
             stop_event.set()
 
     def cmd_timeout_loop() -> None:
-        if rx_timeout_s <= 0:
-            return
         try:
             while not stop_event.is_set():
                 handle_timeout_if_needed()
@@ -199,8 +197,8 @@ def main() -> None:
     server_cfg = build_udp_server_config(cfg)
 
     bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=True)
-    handle_state = HandleState (bot, print_interval_s=server_cfg.print_interval_s)
-    handle_actions = HandleActions (bot, print_interval_s=server_cfg.print_interval_s)
+    handle_state = HandleState (bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
+    handle_actions = HandleActions (bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S, cmd_timeout_s=cfg.timing.cmd_timeout_s)
     log.info("UDP server starting")
     try:
         run_server(
