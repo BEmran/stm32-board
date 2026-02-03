@@ -51,12 +51,27 @@ class UDPRxSockets():
             return self.recv_pkt_non_blocking(pct_size)
         return None
 
+    def try_recv_pkt_with_addr(self, timeout: float, pct_size: int):
+        r, _, _ = select([self.rx], [], [], timeout)
+        if r:
+            return self.recv_pkt_non_blocking_with_addr(pct_size)
+        return None
+
     def recv_pkt_non_blocking(self, pct_size: int)-> Optional[bytes]:
         # Non-blocking pkt poll (in case packets arrive exactly at tick time)
         try:
             pct, _ = self.rx.recvfrom(1024)
             if len(pct) == pct_size:
                 return pct
+        except BlockingIOError:
+            pass
+        return None
+
+    def recv_pkt_non_blocking_with_addr(self, pct_size: int):
+        try:
+            pct, addr = self.rx.recvfrom(1024)
+            if len(pct) == pct_size:
+                return pct, addr
         except BlockingIOError:
             pass
         return None
