@@ -77,13 +77,13 @@ def run_server(
     udp_tx = UDPTxSockets(ip=tx_ip, port=tx_port)
     log.info(f"UDP RX bound to {rx_ip}:{rx_port}, TX to {tx_ip}:{tx_port} at {tx_hz:.2f} Hz")
 
-    stop_event = threading.Event()
+    terminate_event = threading.Event()
     tx_que = MyQueue(maxsize=DEFAULT_RECORDER_QUEUE_MAX)
     rx_que = MyQueue(maxsize=DEFAULT_RECORDER_QUEUE_MAX)
 
     def rx_loop() -> None:
         try:
-            while not stop_event.is_set():
+            while not terminate_event.is_set():
                 pkt = udp_rx.try_recv_pkt(timeout=0.1, pct_size=CMD_STRUCT.size)
                 if pkt is None:
                     continue
@@ -95,13 +95,13 @@ def run_server(
 
         except Exception as exc:
             log.error(f"RX stopped: {exc}")
-            stop_event.set()
+            terminate_event.set()
 
     def tx_loop() -> None:
         dt = 1.0 / tx_hz
         next_time = time.perf_counter()
         try:
-            while not stop_event.is_set():
+            while not terminate_event.is_set():
                 now = time.perf_counter()
                 if now < next_time:
                     time.sleep(next_time - now)
@@ -114,16 +114,16 @@ def run_server(
 
         except Exception as exc:
             log.error(f"Tx loop stopped: {exc}")
-            stop_event.set()
+            terminate_event.set()
 
     def cmd_timeout_loop() -> None:
         try:
-            while not stop_event.is_set():
+            while not terminate_event.is_set():
                 handle_timeout_if_needed()
                 time.sleep(0.05)
         except Exception as exc:
             log.error(f"CMD timeout loop stopped: {exc}")
-            stop_event.set()
+            terminate_event.set()
 
     t_rx = threading.Thread(target=rx_loop, daemon=True)
     t_tx = threading.Thread(target=tx_loop, daemon=True)

@@ -41,8 +41,9 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    rx_ip = cfg.udp.pc_ip or cfg.udp.local_ip
+    rx_ip = cfg.udp.local_ip
     rx_port = cfg.udp.state_port
+    print(f"[UDP] Try Listening on {rx_ip}:{rx_port}")
     rx = UDPRxSockets(ip=rx_ip, port=rx_port)
     print(f"[UDP] Listening on {rx_ip}:{rx_port}")
 
