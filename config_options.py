@@ -25,6 +25,7 @@ DEFAULT_LOG_LEVEL = "DEBUG"
 DEFAULT_STATE_IP = "127.0.0.1"
 DEFAULT_STATE_PORT = 20001
 DEFAULT_CMD_PORT = 20002
+DEFAULT_INFO_PORT = 20003
 
 DEFAULT_CMD_MIN = -100
 DEFAULT_CMD_MAX = 100
@@ -80,6 +81,7 @@ class UdpConfig:
     rpi_ip: str
     state_port: int
     cmd_port: int
+    info_port: int
 
 
 @dataclass
@@ -183,6 +185,7 @@ def load_config_options() -> ConfigOptions:
     rpi_ip = _get(cfg, "udp", "rpi_ip", DEFAULT_STATE_IP) or DEFAULT_STATE_IP
     state_port = _getint(cfg, "udp", "state_port", DEFAULT_STATE_PORT)
     cmd_port = _getint(cfg, "udp", "cmd_port", DEFAULT_CMD_PORT)
+    info_port = _getint(cfg, "udp", "info_port", DEFAULT_INFO_PORT)
 
     cmd_min = _getint(cfg, "cmd", "min", DEFAULT_CMD_MIN)
     cmd_max = _getint(cfg, "cmd", "max", DEFAULT_CMD_MAX)
@@ -218,6 +221,7 @@ def load_config_options() -> ConfigOptions:
             rpi_ip=rpi_ip,
             state_port=state_port,
             cmd_port=cmd_port,
+            info_port=info_port,
         ),
         cmd=CmdConfig(min=cmd_min, max=cmd_max, timeout=cmd_timeout),
         protocol=ProtocolConfig(flag_beep_once=flag_beep_once),
