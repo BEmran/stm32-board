@@ -1,3 +1,4 @@
 logs/
 records/
 __pycache__/
+cpp_controller/build/
