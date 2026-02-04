@@ -1,4 +1,5 @@
 #include "controller.hpp"
+#include "algorithm2.h"
 
 #include <cmath>
 #include <chrono>
@@ -61,7 +62,7 @@ namespace app
       cmd.m2 = 0;
       cmd.m3 = 0;
       cmd.m4 = 0;
-      cmd.beep_ms = 10;
+      cmd.beep_ms = 0;
       cmd.flags = 0;
 
       // Optional: small test command (disabled by default)
@@ -72,7 +73,7 @@ namespace app
       //   if (ui > 200) ui = 200;  // small safe range
       //   cmd.m1 = (uint16_t)ui;
       // }
-
+      cmd.beep_ms = algorithm2(last_state_.az);
       (void)tx_.send(&cmd, sizeof(cmd));
 
       // periodic print

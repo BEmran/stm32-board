@@ -9,7 +9,8 @@ add_executable(controller
   src/udp_socket.cpp
   src/controller.cpp
   src/packets.cpp
+  algorithm/algorithm2.c
 )
 
-target_include_directories(controller PRIVATE include)
+target_include_directories(controller PRIVATE include algorithm)
 target_compile_options(controller PRIVATE -O2)
