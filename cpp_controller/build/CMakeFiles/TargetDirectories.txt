@@ -1,0 +1,3 @@
+/home/emran/ws/yahboom/stm32-board/cpp_controller/build/CMakeFiles/controller.dir
+/home/emran/ws/yahboom/stm32-board/cpp_controller/build/CMakeFiles/edit_cache.dir
+/home/emran/ws/yahboom/stm32-board/cpp_controller/build/CMakeFiles/rebuild_cache.dir
