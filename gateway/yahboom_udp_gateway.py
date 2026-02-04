@@ -271,12 +271,12 @@ def main() -> None:
     _configure_logging(cfg)
     server_cfg = build_udp_server_config(cfg)
 
-    bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=True)
+    bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=False)
     handle_state = HandleState(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
     handle_actions = HandleActions(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S, cmd_timeout_s=cfg.timing.cmd_timeout_s)
     
     log.info("UDP server starting")
-    server  = Server(
+    server = Server(
             handle_state.handle,
             handle_actions.handle,
             handle_actions.handle_timeout_if_needed,
