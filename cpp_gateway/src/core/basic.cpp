@@ -1,13 +1,14 @@
-#include "rosmaster/basic.hpp"
+#include "core/basic.hpp"
+#include "utils/cast.hpp"
 #include "rosmaster/protocol.hpp"
 
-namespace rosmaster {
+namespace core {
 
 Vec3d parse_vec3d(const uint8_t* d){
   Vec3d vec;
-  vec.x = le_i16(d+0);
-  vec.y = le_i16(d+2);
-  vec.z = le_i16(d+4);
+  vec.x = utils::le_i16(d+0);
+  vec.y = utils::le_i16(d+2);
+  vec.z = utils::le_i16(d+4);
   return vec;
 }
 
