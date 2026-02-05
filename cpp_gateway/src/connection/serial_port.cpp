@@ -3,10 +3,8 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <cerrno>
-#include <cstring>
 
-namespace rosmaster {
+namespace connection {
 
 static speed_t baudToConst(int baud) {
   switch (baud) {
@@ -28,19 +26,16 @@ bool SerialPort::open(const std::string& device, int baud) {
 
   termios tty{};
   if (tcgetattr(fd_, &tty) != 0) { close(); return false; }
-
   cfmakeraw(&tty);
 
-  // 8N1
   tty.c_cflag &= ~PARENB;
   tty.c_cflag &= ~CSTOPB;
   tty.c_cflag &= ~CSIZE;
   tty.c_cflag |= CS8;
-
   tty.c_cflag |= (CLOCAL | CREAD);
   tty.c_iflag &= ~(IXON | IXOFF | IXANY);
 
-  // Blocking read, with short timeout to remain responsive
+  // responsive blocking reads
   tty.c_cc[VMIN]  = 1;
   tty.c_cc[VTIME] = 1; // 0.1s
 
@@ -49,7 +44,6 @@ bool SerialPort::open(const std::string& device, int baud) {
   cfsetospeed(&tty, spd);
 
   if (tcsetattr(fd_, TCSANOW, &tty) != 0) { close(); return false; }
-
   tcflush(fd_, TCIFLUSH);
   return true;
 }
@@ -81,4 +75,4 @@ bool SerialPort::writeAll(const uint8_t* data, size_t n) {
   return true;
 }
 
-} // namespace rosmaster
+} // namespace connection

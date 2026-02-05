@@ -1,152 +1,116 @@
 #include "rosmaster/rosmaster.hpp"
-#include <chrono>
+
+#include <cmath>
 #include <cstring>
 #include <iostream>
-#include <thread>
-#include <vector>
 
 namespace rosmaster {
 
+Rosmaster::Rosmaster(const Config& cfg) { connect(cfg); }
+
 Rosmaster::~Rosmaster() {
-  stopReceiveThread();
+  stop();
   disconnect();
 }
 
-bool Rosmaster::connect(const std::string& device, int baud, bool debug) {
-  debug_ = debug;
-  if (!ser_.open(device, baud)) return false;
-
-  if (debug_) std::cout << "Rosmaster Serial Opened! Baudrate=" << baud << "\n";
-
-  // Python calls set_uart_servo_torque(1) here; we skip (not needed for your use case).
-  // You can add it later the same way as other commands.
-
+bool Rosmaster::connect(const Config& cfg) {
+  cfg_ = cfg;
+  if (!ser_.open(cfg_.device, cfg_.baud)) return false;
+  if (cfg_.debug) std::cout << "Rosmaster Serial Opened! Baudrate=" << cfg_.baud << "\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
   return true;
 }
 
 void Rosmaster::disconnect() { ser_.close(); }
 
-bool Rosmaster::startReceiveThread() {
+bool Rosmaster::start() {
   if (running_.load()) return true;
   if (!ser_.isOpen()) return false;
   running_.store(true);
-  rx_thread_ = std::thread(&Rosmaster::rxLoop, this);
+  rx_thread_ = std::thread(&Rosmaster::rx_loop, this);
+  std::this_thread::sleep_for(std::chrono::milliseconds(50)); // like python create_receive_threading
   return true;
 }
 
-void Rosmaster::stopReceiveThread() {
+void Rosmaster::stop() {
   running_.store(false);
   if (rx_thread_.joinable()) rx_thread_.join();
 }
 
-State Rosmaster::getState() const {
+State Rosmaster::get_state() const {
   std::scoped_lock lk(mtx_);
-  return state_;
+  return st_;
 }
 
-uint8_t Rosmaster::limitMotorValue(int v) const {
-  // Python: keep 127 as "no change", clamp otherwise to [-100,100]
+int Rosmaster::clamp_int(int v, int lo, int hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
+int8_t Rosmaster::limit_motor_value(int v) {
   if (v == 127) return 127;
   if (v > 100) return 100;
-  if (v < -100) return static_cast<uint8_t>(static_cast<int8_t>(-100));
-  return static_cast<uint8_t>(static_cast<int8_t>(v));
+  if (v < -100) return -100;
+  return static_cast<int8_t>(v);
 }
 
-bool Rosmaster::sendFrame(uint8_t func, const uint8_t* payload, size_t payload_len, bool fixed_len_5) {
-  // Two patterns in Python:
-  // - fixed length 0x05 frames: [FF, DEVICE_ID, 0x05, func, p0, p1, checksum]
-  // - variable length frames:   [FF, DEVICE_ID, len-1, func, ..., checksum] where cmd[2]=len(cmd)-1
+// ---------------- Frame building ----------------
+// fixed 0x05 frames: [FF, DEVICE_ID, 0x05, func, p0, p1, checksum]
+bool Rosmaster::send_fixed5(uint8_t func, uint8_t p0, uint8_t p1) {
+  uint8_t cmd[7] = {HEAD, DEVICE_ID, 0x05, func, p0, p1, 0};
+  uint8_t sum = COMPLEMENT;
+  for (int i = 0; i < 6; i++) sum = static_cast<uint8_t>(sum + cmd[i]);
+  cmd[6] = sum;
+  const bool ok = ser_.writeAll(cmd, sizeof(cmd));
+  std::this_thread::sleep_for(cfg_.cmd_delay);
+  return ok;
+}
+
+// variable frames: cmd[2] = len(cmd)-1 before checksum, checksum = sum(cmd, COMPLEMENT)&0xFF
+bool Rosmaster::send_var(uint8_t func, const std::vector<uint8_t>& payload) {
   std::vector<uint8_t> cmd;
-  cmd.reserve(64);
+  cmd.reserve(4 + payload.size() + 1);
   cmd.push_back(HEAD);
   cmd.push_back(DEVICE_ID);
-
-  if (fixed_len_5) {
-    // payload_len must be 2
-    cmd.push_back(0x05);
-    cmd.push_back(func);
-    cmd.push_back(payload_len > 0 ? payload[0] : 0);
-    cmd.push_back(payload_len > 1 ? payload[1] : 0);
-    uint8_t sum = COMPLEMENT;
-    for (auto b : cmd) sum = static_cast<uint8_t>(sum + b);
-    cmd.push_back(sum);
-    return ser_.writeAll(cmd.data(), cmd.size());
-  }
-
-  // variable length
-  cmd.push_back(0x00); // placeholder
+  cmd.push_back(0x00); // placeholder len-1
   cmd.push_back(func);
-  for (size_t i = 0; i < payload_len; i++) cmd.push_back(payload[i]);
-  cmd[2] = static_cast<uint8_t>(cmd.size() - 1); // like Python
+  cmd.insert(cmd.end(), payload.begin(), payload.end());
+
+  cmd[2] = static_cast<uint8_t>(cmd.size() - 1);
 
   uint8_t sum = COMPLEMENT;
   for (auto b : cmd) sum = static_cast<uint8_t>(sum + b);
   cmd.push_back(sum);
 
-  return ser_.writeAll(cmd.data(), cmd.size());
-}
-
-bool Rosmaster::requestData(uint8_t function, uint8_t param) {
-  // Python __request_data:
-  // cmd=[FF, DEVICE_ID, 0x05, FUNC_REQUEST_DATA, function, param, checksum]
-  uint8_t payload[2] = {function, param};
-  const bool ok = sendFrame(FUNC_REQUEST_DATA, payload, 2, /*fixed_len_5=*/true);
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  const bool ok = ser_.writeAll(cmd.data(), cmd.size());
+  std::this_thread::sleep_for(cfg_.cmd_delay);
   return ok;
 }
 
-bool Rosmaster::requestVersion() {
-  // Python get_version triggers __request_data(FUNC_VERSION)
-  return requestData(FUNC_VERSION, 0);
+bool Rosmaster::request_data(uint8_t function, uint8_t param) {
+  // python __request_data: fixed 0x05 on FUNC_REQUEST_DATA with (function,param) :contentReference[oaicite:2]{index=2}
+  return send_fixed5(FUNC_REQUEST_DATA, function, param);
 }
 
-bool Rosmaster::setAutoReport(bool enable, bool forever) {
-  // Python set_auto_report_state:
-  // cmd=[FF, DEVICE_ID, 0x05, FUNC_AUTO_REPORT, state1, state2, checksum]
-  uint8_t state1 = enable ? 1 : 0;
-  uint8_t state2 = forever ? 0x5F : 0;
-  uint8_t payload[2] = {state1, state2};
-  const bool ok = sendFrame(FUNC_AUTO_REPORT, payload, 2, /*fixed_len_5=*/true);
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  return ok;
+// wait for response event of ext_type
+bool Rosmaster::wait_for(uint8_t ext_type, std::chrono::milliseconds timeout) {
+  std::unique_lock lk(ev_mtx_);
+  return ev_cv_.wait_for(lk, timeout, [&]{ return last_event_type_ == ext_type; });
 }
 
-bool Rosmaster::setBeep(int on_time_ms) {
-  if (on_time_ms < 0) return false;
-  // Python packs int16 (h) little-endian into 2 bytes
-  int16_t v = static_cast<int16_t>(on_time_ms);
-  uint8_t payload[2] = { static_cast<uint8_t>(v & 0xFF), static_cast<uint8_t>((v >> 8) & 0xFF) };
-  const bool ok = sendFrame(FUNC_BEEP, payload, 2, /*fixed_len_5=*/true);
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  return ok;
-}
-
-bool Rosmaster::setMotor(int s1, int s2, int s3, int s4) {
-  // Python set_motor: FUNC_MOTOR payload is 4 signed bytes (b)
-  uint8_t payload[4] = {
-    limitMotorValue(s1),
-    limitMotorValue(s2),
-    limitMotorValue(s3),
-    limitMotorValue(s4),
-  };
-  const bool ok = sendFrame(FUNC_MOTOR, payload, 4, /*fixed_len_5=*/false);
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  return ok;
-}
-
-void Rosmaster::rxLoop() {
-  // Python receive loop logic:
-  // head1=read1; if 0xFF then head2=read1; if head2==DEVICE_ID-1:
-  // ext_len=read1; ext_type=read1; read (ext_len-2) bytes into ext_data; last byte is rx_check_num;
-  // checksum = ext_len + ext_type + sum(ext_data except last); if checksum%256 == rx_check_num => parse
+// ---------------- RX parsing ----------------
+void Rosmaster::rx_loop() {
+  // mirrors python __receive_data framing:
+  // head1=0xFF, head2=DEVICE_ID-1, ext_len, ext_type, (ext_len-2) data bytes incl checksum :contentReference[oaicite:3]{index=3}
   while (running_.load()) {
-    uint8_t head1{};
-    if (!ser_.readExact(&head1, 1)) continue;
-    if (head1 != HEAD) continue;
+    uint8_t h1{};
+    if (!ser_.readExact(&h1, 1)) continue;
+    if (h1 != HEAD) continue;
 
-    uint8_t head2{};
-    if (!ser_.readExact(&head2, 1)) continue;
-    if (head2 != static_cast<uint8_t>(DEVICE_ID - 1)) continue;
+    uint8_t h2{};
+    if (!ser_.readExact(&h2, 1)) continue;
+    if (h2 != static_cast<uint8_t>(DEVICE_ID - 1)) continue;
 
     uint8_t ext_len{};
     uint8_t ext_type{};
@@ -154,52 +118,53 @@ void Rosmaster::rxLoop() {
     if (!ser_.readExact(&ext_type, 1)) continue;
 
     const int data_len = static_cast<int>(ext_len) - 2;
-    if (data_len <= 0 || data_len > 128) continue;
+    if (data_len <= 0 || data_len > 200) continue;
 
     std::vector<uint8_t> buf(static_cast<size_t>(data_len));
     if (!ser_.readExact(buf.data(), buf.size())) continue;
 
-    // checksum: ext_len + ext_type + sum(all bytes except last) must match last byte
-    uint8_t rx_check = buf.back();
+    const uint8_t rx_check = buf.back();
     uint32_t sum = static_cast<uint32_t>(ext_len) + static_cast<uint32_t>(ext_type);
     for (size_t i = 0; i + 1 < buf.size(); i++) sum += buf[i];
     if (static_cast<uint8_t>(sum & 0xFF) != rx_check) {
-      if (debug_) std::cout << "checksum error ext_type=" << int(ext_type) << "\n";
+      if (cfg_.debug) std::cout << "checksum error type=" << int(ext_type) << "\n";
       continue;
     }
 
-    parsePayload(ext_type, buf.data(), buf.size() - 1); // exclude checksum byte
+    parse_payload(ext_type, buf.data(), buf.size() - 1);
+
+    // notify waiters
+    {
+      std::lock_guard lk(ev_mtx_);
+      last_event_type_ = ext_type;
+    }
+    ev_cv_.notify_all();
   }
 }
 
-void Rosmaster::parsePayload(uint8_t ext_type, const uint8_t* d, size_t n) {
-  // Mirrors __parse_data in Python (subset)
+
+void Rosmaster::parse_payload(uint8_t ext_type, const uint8_t* d, size_t n) {
   std::scoped_lock lk(mtx_);
 
   if (ext_type == FUNC_REPORT_SPEED && n >= 7) {
-    state_.spd.vx = static_cast<float>(le_i16(d + 0)) / 1000.0f;
-    state_.spd.vy = static_cast<float>(le_i16(d + 2)) / 1000.0f;
-    state_.spd.vz = static_cast<float>(le_i16(d + 4)) / 1000.0f;
-    state_.spd.battery_voltage = static_cast<float>(d[6]) / 10.0f; // Python returns /10.0 in getter
+    st_.battery_voltage_v = (float)(d[6]) / 10.0f;
     return;
   }
 
   if (ext_type == FUNC_REPORT_MPU_RAW && n >= 18) {
-    const float gyro_ratio  = 1.0f / 3754.9f;   // same as Python
-    const float accel_ratio = 1.0f / 1671.84f;  // same as Python
+    const float gyro_ratio  = 1.0f / 3754.9f;
+    const float accel_ratio = 1.0f / 1671.84f;
     const float mag_ratio   = 1.0f;
 
-    state_.imu.gx = le_i16(d + 0) * gyro_ratio;
-    state_.imu.gy = le_i16(d + 2) * -gyro_ratio;
-    state_.imu.gz = le_i16(d + 4) * -gyro_ratio;
+    st_.imu.gyro = parse_vec3d(d);
+    st_.imu.gyro = rearrange_gyro(d);
+    st_.imu.gyro = scale_vec3d(gyro_ratio);
 
-    state_.imu.ax = le_i16(d + 6)  * accel_ratio;
-    state_.imu.ay = le_i16(d + 8)  * accel_ratio;
-    state_.imu.az = le_i16(d + 10) * accel_ratio;
+    st_.imu.acc = parse_vec3d(d+6);
+    st_.imu.acc = scale_vec3d(accel_ratio);
 
-    state_.imu.mx = le_i16(d + 12) * mag_ratio;
-    state_.imu.my = le_i16(d + 14) * mag_ratio;
-    state_.imu.mz = le_i16(d + 16) * mag_ratio;
+    st_.imu.mag = parse_vec3d(d+12);
+    st_.imu.mag = scale_vec3d(mag_ratio);
     return;
   }
 
@@ -207,46 +172,149 @@ void Rosmaster::parsePayload(uint8_t ext_type, const uint8_t* d, size_t n) {
     const float gyro_ratio  = 1.0f / 1000.0f;
     const float accel_ratio = 1.0f / 1000.0f;
     const float mag_ratio   = 1.0f / 1000.0f;
+    st_.imu.gyro = parse_vec3d(d);
+    st_.imu.gyro = scale_vec3d(gyro_ratio);
 
-    state_.imu.gx = le_i16(d + 0) * gyro_ratio;
-    state_.imu.gy = le_i16(d + 2) * gyro_ratio;
-    state_.imu.gz = le_i16(d + 4) * gyro_ratio;
+    st_.imu.acc = parse_vec3d(d+6);
+    st_.imu.acc = scale_vec3d(accel_ratio);
 
-    state_.imu.ax = le_i16(d + 6)  * accel_ratio;
-    state_.imu.ay = le_i16(d + 8)  * accel_ratio;
-    state_.imu.az = le_i16(d + 10) * accel_ratio;
-
-    state_.imu.mx = le_i16(d + 12) * mag_ratio;
-    state_.imu.my = le_i16(d + 14) * mag_ratio;
-    state_.imu.mz = le_i16(d + 16) * mag_ratio;
+    st_.imu.mag = parse_vec3d(d+12);
+    st_.imu.mag = scale_vec3d(mag_ratio);
     return;
   }
 
   if (ext_type == FUNC_REPORT_IMU_ATT && n >= 6) {
-    // Python: /10000.0 gives radians (?) stored; later converts to deg by *57.295...
-    state_.ang.roll  = le_i16(d + 0) / 10000.0f;
-    state_.ang.pitch = le_i16(d + 2) / 10000.0f;
-    state_.ang.yaw   = le_i16(d + 4) / 10000.0f;
+    st_.att.roll  = le_i16(d+0) / 10000.0f;
+    st_.att.pitch = le_i16(d+2) / 10000.0f;
+    st_.att.yaw   = le_i16(d+4) / 10000.0f;
     return;
   }
 
   if (ext_type == FUNC_REPORT_ENCODER && n >= 16) {
-    state_.enc.e1 = le_i32(d + 0);
-    state_.enc.e2 = le_i32(d + 4);
-    state_.enc.e3 = le_i32(d + 8);
-    state_.enc.e4 = le_i32(d + 12);
+    st_.enc.m1 = le_i32(d+0);
+    st_.enc.m2 = le_i32(d+4);
+    st_.enc.m3 = le_i32(d+8);
+    st_.enc.m4 = le_i32(d+12);
     return;
   }
 
   if (ext_type == FUNC_VERSION && n >= 2) {
-    // Python: version = H + L/10.0
-    const uint8_t H = d[0];
-    const uint8_t L = d[1];
-    state_.version = static_cast<float>(H) + static_cast<float>(L) / 10.0f;
+    version_.high = d[0];
+    version_.low = d[1];
+    version_.version = (float)version_.high + (float)version_.low / 10.0f;
     return;
   }
+}
 
-  // (Extend here as needed)
+// ---------------- Public API (full) ----------------
+bool Rosmaster::set_auto_report_state(bool enable, bool forever) {
+  const uint8_t state1 = enable ? 1 : 0;
+  const uint8_t state2 = forever ? 0x5F : 0;
+  return send_fixed5(FUNC_AUTO_REPORT, state1, state2);
+}
+
+bool Rosmaster::set_beep(int on_time_ms) {
+  if (on_time_ms < 0) return false;
+  const int16_t v = static_cast<int16_t>(on_time_ms);
+  return send_fixed5(FUNC_BEEP, uint8_t(v & 0xFF), uint8_t((v >> 8) & 0xFF));
+}
+
+bool Rosmaster::set_pwm_servo(uint8_t servo_id, int angle_deg) {
+  if (servo_id < 1 || servo_id > 4) return false;
+  angle_deg = clamp_int(angle_deg, 0, 180);
+  return send_var(FUNC_PWM_SERVO, {servo_id, (uint8_t)angle_deg});
+}
+
+bool Rosmaster::set_pwm_servo_all(int a1,int a2,int a3,int a4) {
+  auto fix = [](int a){ return (a < 0 || a > 180) ? 255 : a; };
+  return send_var(FUNC_PWM_SERVO_ALL, {(uint8_t)fix(a1),(uint8_t)fix(a2),(uint8_t)fix(a3),(uint8_t)fix(a4)});
+}
+
+bool Rosmaster::set_colorful_lamps(uint8_t led_id, uint8_t r, uint8_t g, uint8_t b) {
+  return send_var(FUNC_RGB, {led_id, r, g, b});
+}
+
+bool Rosmaster::set_colorful_effect(uint8_t effect, uint8_t speed, uint8_t parm) {
+  return send_var(FUNC_RGB_EFFECT, {effect, speed, parm});
+}
+
+bool Rosmaster::set_motor(int s1, int s2, int s3, int s4) {
+  const int8_t a = limit_motor_value(s1);
+  const int8_t b = limit_motor_value(s2);
+  const int8_t c = limit_motor_value(s3);
+  const int8_t d = limit_motor_value(s4);
+  return send_var(FUNC_MOTOR, {(uint8_t)a,(uint8_t)b,(uint8_t)c,(uint8_t)d});
+}
+
+// ---- Reset ----
+bool Rosmaster::reset_flash_value() {
+  const bool ok = send_var(FUNC_RESET_FLASH, {0x5F});
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  return ok;
+}
+
+void Rosmaster::clear_auto_report_data() {
+  std::scoped_lock lk(mtx_);
+  st_.imu = {};
+  st_.att = {};
+  st_.enc = {};
+  st_.battery_voltage = 0.0f;
+}
+
+// ---- Fast getters ----
+Vec3d Rosmaster::get_accelerometer_data() const {
+  std::scoped_lock lk(mtx_);
+  return st_.imu.acc;
+}
+
+Vec3d Rosmaster::get_gyroscope_data() const {
+  std::scoped_lock lk(mtx_);
+  return st_.imu.gyro;
+}
+
+Vec3d Rosmaster::get_magnetometer_data() const {
+  std::scoped_lock lk(mtx_);
+  return st_.imu.mag;
+}
+
+float Rosmaster::get_battery_voltage() const {
+  std::scoped_lock lk(mtx_);
+  return st_.battery_voltage;
+}
+
+Encoder4 Rosmaster::get_motor_encoder() const {
+  std::scoped_lock lk(mtx_);
+  return {st_.enc.m1, st_.enc.m2, st_.enc.m3, st_.enc.m4};
+}
+
+Attitude Rosmaster::get_imu_attitude_data() const {
+  std::scoped_lock lk(mtx_);
+  return st_.att;
+}
+
+// ---- Request/response getters ----
+float Rosmaster::get_version() {
+  {
+    std::scoped_lock lk(mtx_);
+    if (version_.high != 0) return version_.version;
+    version_.high = version_.low = 0;
+    version_.version = 0;
+  }
+
+  request_data(FUNC_VERSION, 0);
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(20);
+  while (std::chrono::steady_clock::now() < deadline) {
+    float v=0.0f; uint8_t h=0;
+    {
+      std::scoped_lock lk(mtx_);
+      h = version_.high;
+      v = version_.version;
+    }
+    if (h != 0) return v;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return -1.0f;
 }
 
 } // namespace rosmaster

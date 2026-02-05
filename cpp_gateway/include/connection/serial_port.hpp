@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace rosmaster {
+namespace connection {
 
 class SerialPort {
 public:
@@ -27,4 +27,4 @@ private:
   int fd_ = -1;
 };
 
-} // namespace rosmaster
+} // namespace connection
