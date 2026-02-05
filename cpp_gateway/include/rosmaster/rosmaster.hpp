@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <array>
 
 namespace rosmaster {
 
@@ -100,9 +101,9 @@ private:
   Version version_{};
 
   // signal that "something of ext_type arrived"
-  std::mutex ev_mtx_;
+  mutable std::mutex ev_mtx_;
   std::condition_variable ev_cv_;
-  uint8_t last_event_type_{0};
+  std::array<uint32_t, 256> ev_count_{};
 };
 
 } // namespace rosmaster

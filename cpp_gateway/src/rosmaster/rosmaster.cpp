@@ -99,8 +99,11 @@ bool Rosmaster::request_data(uint8_t function, uint8_t param) {
 
 // wait for response event of ext_type
 bool Rosmaster::wait_for(uint8_t ext_type, std::chrono::milliseconds timeout) {
-  std::unique_lock lk(ev_mtx_);
-  return ev_cv_.wait_for(lk, timeout, [&]{ return last_event_type_ == ext_type; });
+  std::unique_lock<std::mutex> lk(ev_mtx_);
+  uint32_t start = ev_count_[ext_type];
+  return ev_cv_.wait_for(lk, timeout, [&] {
+    return ev_count_[ext_type] != start;
+  });
 }
 
 // ---------------- RX parsing ----------------
@@ -139,8 +142,8 @@ void Rosmaster::rx_loop() {
 
     // notify waiters
     {
-      std::lock_guard lk(ev_mtx_);
-      last_event_type_ = ext_type;
+      std::lock_guard<std::mutex> lk(ev_mtx_);
+      ev_count_[ext_type]++;   // ext_type is uint8_t
     }
     ev_cv_.notify_all();
   }
