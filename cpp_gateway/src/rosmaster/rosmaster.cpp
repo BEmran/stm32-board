@@ -1,4 +1,5 @@
 #include "rosmaster/rosmaster.hpp"
+#include "utils/cast.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -41,7 +42,7 @@ void Rosmaster::stop() {
   if (rx_thread_.joinable()) rx_thread_.join();
 }
 
-State Rosmaster::get_state() const {
+core::State Rosmaster::get_state() const {
   std::scoped_lock lk(mtx_);
   return st_;
 }
@@ -159,31 +160,31 @@ void Rosmaster::parse_payload(uint8_t ext_type, const uint8_t* d, size_t n) {
   }
 
   if (ext_type == FUNC_REPORT_MPU_RAW && n >= 18) {
-    st_.imu.gyro = scale_vec3d(rearrange_gyro(parse_vec3d(d)), GYRO_RATIO);
-    st_.imu.acc = scale_vec3d(parse_vec3d(d+6), ACCEL_RATIO);
-    st_.imu.mag = scale_vec3d(parse_vec3d(d+12), MAG_RATIO);
+    st_.imu.gyro = core::scale_vec3d(core::rearrange_gyro(core::parse_vec3d(d)), GYRO_RATIO);
+    st_.imu.acc = core::scale_vec3d(core::parse_vec3d(d+6), ACCEL_RATIO);
+    st_.imu.mag = core::scale_vec3d(core::parse_vec3d(d+12), MAG_RATIO);
     return;
   }
 
   if (ext_type == FUNC_REPORT_ICM_RAW && n >= 18) {
-    st_.imu.gyro = scale_vec3d(parse_vec3d(d), Milli_RATIO);
-    st_.imu.acc = scale_vec3d(parse_vec3d(d+6), Milli_RATIO);
-    st_.imu.mag = scale_vec3d(parse_vec3d(d+12), Milli_RATIO);
+    st_.imu.gyro = core::scale_vec3d(core::parse_vec3d(d), Milli_RATIO);
+    st_.imu.acc = core::scale_vec3d(core::parse_vec3d(d+6), Milli_RATIO);
+    st_.imu.mag = core::scale_vec3d(core::parse_vec3d(d+12), Milli_RATIO);
     return;
   }
 
   if (ext_type == FUNC_REPORT_IMU_ATT && n >= 6) {
-    st_.att.roll  = le_i16(d+0) / 10000.0f;
-    st_.att.pitch = le_i16(d+2) / 10000.0f;
-    st_.att.yaw   = le_i16(d+4) / 10000.0f;
+    st_.ang.roll  = utils::le_i16(d+0) / 10000.0f;
+    st_.ang.pitch = utils::le_i16(d+2) / 10000.0f;
+    st_.ang.yaw   = utils::le_i16(d+4) / 10000.0f;
     return;
   }
 
   if (ext_type == FUNC_REPORT_ENCODER && n >= 16) {
-    st_.enc.m1 = le_i32(d+0);
-    st_.enc.m2 = le_i32(d+4);
-    st_.enc.m3 = le_i32(d+8);
-    st_.enc.m4 = le_i32(d+12);
+    st_.enc.e1 = utils::le_i32(d+0);
+    st_.enc.e2 = utils::le_i32(d+4);
+    st_.enc.e3 = utils::le_i32(d+8);
+    st_.enc.e4 = utils::le_i32(d+12);
     return;
   }
 
@@ -245,23 +246,23 @@ bool Rosmaster::reset_flash_value() {
 void Rosmaster::clear_auto_report_data() {
   std::scoped_lock lk(mtx_);
   st_.imu = {};
-  st_.att = {};
+  st_.ang = {};
   st_.enc = {};
   st_.battery_voltage = 0.0f;
 }
 
 // ---- Fast getters ----
-Vec3d Rosmaster::get_accelerometer_data() const {
+core::Vec3d Rosmaster::get_accelerometer_data() const {
   std::scoped_lock lk(mtx_);
   return st_.imu.acc;
 }
 
-Vec3d Rosmaster::get_gyroscope_data() const {
+core::Vec3d Rosmaster::get_gyroscope_data() const {
   std::scoped_lock lk(mtx_);
   return st_.imu.gyro;
 }
 
-Vec3d Rosmaster::get_magnetometer_data() const {
+core::Vec3d Rosmaster::get_magnetometer_data() const {
   std::scoped_lock lk(mtx_);
   return st_.imu.mag;
 }
@@ -271,14 +272,14 @@ float Rosmaster::get_battery_voltage() const {
   return st_.battery_voltage;
 }
 
-Encoder4 Rosmaster::get_motor_encoder() const {
+core::Encoders Rosmaster::get_motor_encoder() const {
   std::scoped_lock lk(mtx_);
-  return {st_.enc.m1, st_.enc.m2, st_.enc.m3, st_.enc.m4};
+  return {st_.enc.e1, st_.enc.e2, st_.enc.e3, st_.enc.e4};
 }
 
-Attitude Rosmaster::get_imu_attitude_data() const {
+core::Angles Rosmaster::get_imu_attitude_data() const {
   std::scoped_lock lk(mtx_);
-  return st_.att;
+  return st_.ang;
 }
 
 // ---- Request/response getters ----

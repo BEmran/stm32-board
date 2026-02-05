@@ -6,6 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <system_error>
+#include <unordered_map>
 
 namespace utils {
 
@@ -156,8 +157,8 @@ CSVRow CSVRecorder::actions_to_row(
 }
 
 CSVRow CSVRecorder::state_to_row(
-    const Timestamps& ts, 
-    const State& state
+    const core::Timestamps& ts, 
+    const core::State& state
 ) const {
     return {
         {"t_epoch_s", format_value(ts.epoch_s, 6)},
@@ -231,14 +232,15 @@ double CSVRecorder::epoch_now() noexcept {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto duration = now.time_since_epoch();
-    return duration_cast<duration<double>>(duration).count();
+    return duration_cast<std::chrono::duration<double>>(duration).count();
+           
 }
 
 double CSVRecorder::monotonic_now() noexcept {
     using namespace std::chrono;
     auto now = steady_clock::now();
     auto duration = now.time_since_epoch();
-    return duration_cast<duration<double>>(duration).count();
+    return duration_cast<std::chrono::duration<double>>(duration).count();
 }
 
 } // namespace utils

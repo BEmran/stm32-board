@@ -20,3 +20,6 @@ target_link_libraries(demo PRIVATE rosmaster)
 
 add_executable(udp_gateway app/udp_gateway.cpp)
 target_link_libraries(udp_gateway PRIVATE rosmaster)
+
+add_executable(demo_logger app/demo_logger.cpp)
+target_link_libraries(demo_logger PRIVATE rosmaster)

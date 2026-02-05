@@ -1,5 +1,5 @@
 
-#include "gateway/udp_socket.hpp"
+#include "connection/udp_socket.hpp"
 
 #include <arpa/inet.h>
 #include <fcntl.h>

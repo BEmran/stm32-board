@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "core/basic.hpp"
-namespace utils {
 
 // Concepts for type safety
 template <typename T>
@@ -26,6 +25,7 @@ concept Streamable = requires(std::ostream& os, const T& t) {
     { os << t } -> std::same_as<std::ostream&>;
 };
 
+namespace utils {
 // CSV row as key-value pairs
 using CSVRow = std::vector<std::pair<std::string, std::string>>;
 
@@ -177,10 +177,11 @@ private:
     bool header_written_{false};
 };
 
+} // namespace utils
 // Template implementation
 
 template <Numeric T>
-std::string CSVRecorder::format_value(T value, int precision) {
+std::string utils::CSVRecorder::format_value(T value, int precision) {
     std::ostringstream oss;
     if constexpr (std::is_floating_point_v<T>) {
         oss.precision(precision);
@@ -207,4 +208,3 @@ namespace headers {
     };
 } // namespace headers
 
-} // namespace utils

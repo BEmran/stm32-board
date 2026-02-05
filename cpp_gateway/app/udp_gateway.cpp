@@ -27,15 +27,15 @@ int main(int argc, char** argv) {
   int serial_baud = 115200;
 
   // Publish state to (dst_ip, dst_state_port)
-  std::string dst_ip = "127.0.0.1";
-  uint16_t dst_state_port = 25001;
+  std::string dst_ip = "192.168.68.111";
+  uint16_t dst_state_port = 20001;
 
   // Receive commands on cmd_port (bind local)
   std::string bind_ip = "0.0.0.0";
-  uint16_t cmd_port = 25002;
+  uint16_t cmd_port = 20002;
 
-  double hz = 200.0;
-  double cmd_timeout_s = 0.2; // if no cmd received, stop motors
+  double hz = 10.0;
+  double cmd_timeout_s = 10.2; // if no cmd received, stop motors
 
   // Simple CLI:
   //  --serial /dev/ttyUSB0 --baud 115200
@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
       m2 = clamp_i16(last_cmd.m2, -100, 100);
       m3 = clamp_i16(last_cmd.m3, -100, 100);
       m4 = clamp_i16(last_cmd.m4, -100, 100);
-      beep_ms = last_cmd.beep_ms;
+      beep_ms = 0;
     }
     bot.set_motor(m1, m2, m3, m4);
     if (beep_ms > 0) {
@@ -155,19 +155,15 @@ int main(int argc, char** argv) {
     }
 
     // ---- publish state ----
-    const rosmaster::State s = bot.get_state();
+    const core::State s = bot.get_state();
     gateway::StatePktV1 pkt{};
     pkt.seq = ++state_seq;
     pkt.t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
-
     pkt.ax = s.imu.acc.x; pkt.ay = s.imu.acc.y; pkt.az = s.imu.acc.z;
     pkt.gx = s.imu.gyro.x; pkt.gy = s.imu.gyro.y; pkt.gz = s.imu.gyro.z;
     pkt.mx = s.imu.mag.x; pkt.my = s.imu.mag.y; pkt.mz = s.imu.mag.z;
-
-    pkt.roll = s.att.roll; pkt.pitch = s.att.pitch; pkt.yaw = s.att.yaw;
-
-    pkt.e1 = s.enc.m1; pkt.e2 = s.enc.m2; pkt.e3 = s.enc.m3; pkt.e4 = s.enc.m4;
-
+    pkt.roll = s.ang.roll; pkt.pitch = s.ang.pitch; pkt.yaw = s.ang.yaw;
+    pkt.e1 = s.enc.e1; pkt.e2 = s.enc.e2; pkt.e3 = s.enc.e3; pkt.e4 = s.enc.e4;
     pkt.battery_v = s.battery_voltage;
 
     (void)state_tx.send(&pkt, sizeof(pkt));

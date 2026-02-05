@@ -1,6 +1,6 @@
 #pragma once
 #include "rosmaster/protocol.hpp"
-#include "rosmaster/basic.hpp"
+#include "core/basic.hpp"
 #include "connection/serial_port.hpp"
 
 #include <atomic>
@@ -53,14 +53,14 @@ public:
   void clear_auto_report_data();
 
   // ---- Getters (fast, no request) ----
-  Vec3d get_accelerometer_data() const;
-  Vec3d get_gyroscope_data() const;
-  Vec3d get_magnetometer_data() const;
-  Encoder4 get_motor_encoder() const;
+  core::Vec3d get_accelerometer_data() const;
+  core::Vec3d get_gyroscope_data() const;
+  core::Vec3d get_magnetometer_data() const;
+  core::Encoders get_motor_encoder() const;
   float get_battery_voltage() const;
 
   // attitude: degrees by default like python
-  Attitude get_imu_attitude_data() const;
+  core::Angles get_imu_attitude_data() const;
 
   // ---- Request/response getters ----
   std::pair<int,int> get_uart_servo_value(uint8_t servo_id); // returns {id, pulse} or {-1,-1}
@@ -69,7 +69,7 @@ public:
   float get_version();                                       // version or -1
 
   // Snapshot (full internal state)
-  State get_state() const;
+  core::State get_state() const;
 
 private:
   // internals
@@ -97,8 +97,8 @@ private:
   std::thread rx_thread_;
 
   mutable std::mutex mtx_;
-  State st_{};
-  Version version_{};
+  core::State st_{};
+  core::Version version_{};
 
   // signal that "something of ext_type arrived"
   mutable std::mutex ev_mtx_;

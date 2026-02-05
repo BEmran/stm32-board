@@ -1,4 +1,4 @@
-#include "rosmaster/basic.hpp"
+#include "core/basic.hpp"
 #include "rosmaster/rosmaster.hpp"
 #include "utils/csv_recorder.hpp"
 #include <iostream>
@@ -24,8 +24,8 @@ int main() {
   std::cout << "Version: " << bot.get_version() << "\n";
 
   // Create recorder
-  utils::CSVRecorder actions_recorder("/recorder/cmd", "actions", utils::headers::ACTIONS);
-  utils::CSVRecorder state_recorder("/recorder/state", "state", utils::headers::STATE);
+  utils::CSVRecorder actions_recorder("./recorder/cmd", "actions", headers::ACTIONS);
+  utils::CSVRecorder state_recorder("./recorder/state", "state", headers::STATE);
   
   // Open the recorder
   if (!actions_recorder.open() or !state_recorder.open()) {
