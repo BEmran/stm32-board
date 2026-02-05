@@ -11,7 +11,7 @@ Vec3d parse_vec3d(const uint8_t* d){
   return vec;
 }
 
-Vec3d scale_vec3d(const Vec3d& in, float scale) {
+Vec3d scale_vec3d(Vec3d in, float scale) {
   Vec3d out;
   out.x = in.x * scale;
   out.y = in.y * scale;
@@ -19,7 +19,7 @@ Vec3d scale_vec3d(const Vec3d& in, float scale) {
   return out;
 }
 
-Vec3d rearrange_gyro(const Vec3d& in) {
+Vec3d rearrange_gyro(Vec3d in) {
   Vec3d out;
   out.x = +in.x;
   out.y = -in.y;

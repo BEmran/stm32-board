@@ -23,8 +23,8 @@ struct Encoder4 {
 };
 
 struct Version {
-  uint8_t version_H {0};
-  uint8_t version_L{0};
+  uint8_t high {0};
+  uint8_t low{0};
   float version {0.0f};
 };
 
@@ -34,5 +34,9 @@ struct State {
   Encoder4 enc;
   float battery_voltage{0.0f};
 };
+
+Vec3d parse_vec3d(const uint8_t* d);
+Vec3d scale_vec3d(Vec3d in, float scale);
+Vec3d rearrange_gyro(Vec3d in);
 
 } // namespace rosmaster

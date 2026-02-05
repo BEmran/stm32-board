@@ -6,6 +6,10 @@
 
 namespace rosmaster {
 
+constexpr float GYRO_RATIO {1.0f / 3754.9f};
+constexpr float ACCEL_RATIO{1.0f / 1671.84f};
+constexpr float MAG_RATIO  {1.0f};
+constexpr float Milli_RATIO  {1.0f / 1000.0f};
 Rosmaster::Rosmaster(const Config& cfg) { connect(cfg); }
 
 Rosmaster::~Rosmaster() {
@@ -147,39 +151,21 @@ void Rosmaster::parse_payload(uint8_t ext_type, const uint8_t* d, size_t n) {
   std::scoped_lock lk(mtx_);
 
   if (ext_type == FUNC_REPORT_SPEED && n >= 7) {
-    st_.battery_voltage_v = (float)(d[6]) / 10.0f;
+    st_.battery_voltage = (float)(d[6]) / 10.0f;
     return;
   }
 
   if (ext_type == FUNC_REPORT_MPU_RAW && n >= 18) {
-    const float gyro_ratio  = 1.0f / 3754.9f;
-    const float accel_ratio = 1.0f / 1671.84f;
-    const float mag_ratio   = 1.0f;
-
-    st_.imu.gyro = parse_vec3d(d);
-    st_.imu.gyro = rearrange_gyro(d);
-    st_.imu.gyro = scale_vec3d(gyro_ratio);
-
-    st_.imu.acc = parse_vec3d(d+6);
-    st_.imu.acc = scale_vec3d(accel_ratio);
-
-    st_.imu.mag = parse_vec3d(d+12);
-    st_.imu.mag = scale_vec3d(mag_ratio);
+    st_.imu.gyro = scale_vec3d(rearrange_gyro(parse_vec3d(d)), GYRO_RATIO);
+    st_.imu.acc = scale_vec3d(parse_vec3d(d+6), ACCEL_RATIO);
+    st_.imu.mag = scale_vec3d(parse_vec3d(d+12), MAG_RATIO);
     return;
   }
 
   if (ext_type == FUNC_REPORT_ICM_RAW && n >= 18) {
-    const float gyro_ratio  = 1.0f / 1000.0f;
-    const float accel_ratio = 1.0f / 1000.0f;
-    const float mag_ratio   = 1.0f / 1000.0f;
-    st_.imu.gyro = parse_vec3d(d);
-    st_.imu.gyro = scale_vec3d(gyro_ratio);
-
-    st_.imu.acc = parse_vec3d(d+6);
-    st_.imu.acc = scale_vec3d(accel_ratio);
-
-    st_.imu.mag = parse_vec3d(d+12);
-    st_.imu.mag = scale_vec3d(mag_ratio);
+    st_.imu.gyro = scale_vec3d(parse_vec3d(d), Milli_RATIO);
+    st_.imu.acc = scale_vec3d(parse_vec3d(d+6), Milli_RATIO);
+    st_.imu.mag = scale_vec3d(parse_vec3d(d+12), Milli_RATIO);
     return;
   }
 

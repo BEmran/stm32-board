@@ -1,7 +1,7 @@
 #pragma once
 #include "rosmaster/protocol.hpp"
 #include "rosmaster/basic.hpp"
-#include "rosmaster/serial_port.hpp"
+#include "connection/serial_port.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -100,8 +100,8 @@ private:
   Version version_{};
 
   // signal that "something of ext_type arrived"
-  std::mutex {ev_mtx_};
-  std::condition_variable {ev_cv_};
+  std::mutex ev_mtx_;
+  std::condition_variable ev_cv_;
   uint8_t last_event_type_{0};
 };
 
