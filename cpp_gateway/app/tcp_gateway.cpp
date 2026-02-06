@@ -183,7 +183,6 @@ int main(int argc, char **argv)
       size_t n = 0;
       if (cmd_client.try_recv(tmp, sizeof(tmp), n))
       {
-        logger::info() << "size n: " << n;
         if (n == 0)
         {
           cmd_client.close();
@@ -204,21 +203,24 @@ int main(int argc, char **argv)
           }
         }
       }
+      logger::info() << "size n: " << n;
     }
 
     // ---- safety timeout ----
     const double cmd_age = std::chrono::duration<double>(clock::now() - last_cmd_time).count();
     const bool cmd_valid = have_cmd && (cmd_age <= config.cmd_timeout_s);
-    logger::debug() << "received cmd, " << " seq=" << last_cmd.seq << " m1:" << last_cmd.m1 << " m2:" << last_cmd.m2 << " m3:" << last_cmd.m3 << " m4:" << last_cmd.m4 << " beep_ms=" << last_cmd.beep_ms << " flags=" << last_cmd.flags;
-
+    
     // ---- apply command to board ----
     core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
     if (cmd_valid)
     {
-      logger::info() << "received valid cmd";
+      logger::info() << "received cmd, " << " seq=" << last_cmd.seq << " m1:" << last_cmd.m1 << " m2:" << last_cmd.m2 << " m3:" << last_cmd.m3 << " m4:" << last_cmd.m4 << " beep_ms=" << last_cmd.beep_ms << " flags=" << last_cmd.flags;
+
       bot.apply_actions(actions);
       actions.beep_ms = 0;
-    } else {
+    }
+    else
+    {
       logger::warn() << "the received cmd is invalid";
     }
 
