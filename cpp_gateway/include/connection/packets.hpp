@@ -34,13 +34,13 @@ static_assert(sizeof(StatePktV1) == 76, "StatePktV1 must be 80 bytes");
 #pragma pack(push, 1)
 struct CmdPktV1 {
   uint32_t seq;     // incrementing sequence number from controller
-  int16_t  m1, m2, m3, m4; // motor command -100..100 (match Rosmaster set_motor)
+  uint16_t m1, m2, m3, m4; // motor command 0..100 (match Rosmaster set_motor)
   uint16_t beep_ms; // 0 = no beep, otherwise duration
-  uint8_t flags;   // reserved for future
+  uint16_t flags;   // reserved for future
 };
 #pragma pack(pop)
 
-static_assert(sizeof(CmdPktV1) == 15, "CmdPktV1 must be 15 bytes");
+static_assert(sizeof(CmdPktV1) == 16, "CmdPktV1 must be 15 bytes");
 
 StatePktV1 state_to_state_pktv1(uint32_t seq, float t_mono_s, core::State state);
 core::Actions cmd_pktv1_to_actions(CmdPktV1 pkt);
