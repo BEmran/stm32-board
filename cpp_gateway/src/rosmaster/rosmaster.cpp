@@ -47,6 +47,11 @@ core::State Rosmaster::get_state() const {
   return st_;
 }
 
+bool Rosmaster::apply_actions(const core::Actions& actions) {
+  return set_beep(actions.beep_ms) &&
+         set_motor(actions.motors.m1, actions.motors.m2, actions.motors.m3, actions.motors.m4);
+}
+
 int Rosmaster::clamp_int(int v, int lo, int hi) {
   if (v < lo) return lo;
   if (v > hi) return hi;

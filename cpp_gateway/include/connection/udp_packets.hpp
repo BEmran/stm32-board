@@ -1,9 +1,11 @@
 
 #pragma once
+#include "core/basic.hpp"
+
 #include <cstdint>
 #include <cstddef>
 
-namespace gateway {
+namespace connection {
 
 // Fixed binary packet published by the gateway (Pi -> clients).
 // Keep this stable: add new fields at the end and bump version/flags if needed.
@@ -23,7 +25,7 @@ struct StatePktV1 {
   // encoders
   int32_t e1, e2, e3, e4;
 
-  float battery_v;
+  float battery_voltage;
 };
 #pragma pack(pop)
 
@@ -34,10 +36,12 @@ struct CmdPktV1 {
   uint32_t seq;     // incrementing sequence number from controller
   int16_t  m1, m2, m3, m4; // motor command -100..100 (match Rosmaster set_motor)
   uint16_t beep_ms; // 0 = no beep, otherwise duration
-  uint16_t flags;   // reserved for future
+  uint8_t flags;   // reserved for future
 };
 #pragma pack(pop)
 
-static_assert(sizeof(CmdPktV1) == 16, "CmdPktV1 must be 16 bytes");
+static_assert(sizeof(CmdPktV1) == 15, "CmdPktV1 must be 16 bytes");
 
-} // namespace gateway
+StatePktV1 state_to_state_pktv1(uint32_t seq, double t_mono_s, core::State state);
+core::Actions cmd_pktv1_to_actions(CmdPktV1 pkt);
+} // namespace connection

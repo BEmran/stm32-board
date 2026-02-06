@@ -70,6 +70,7 @@ public:
 
   // Snapshot (full internal state)
   core::State get_state() const;
+  bool apply_actions(const core::Actions& actions);
 
 private:
   // internals

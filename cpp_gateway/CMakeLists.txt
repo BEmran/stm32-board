@@ -8,6 +8,7 @@ add_library(rosmaster
   src/core/basic.cpp
   src/rosmaster/rosmaster.cpp
   src/connection/serial_port.cpp
+  src/connection/udp_packets.cpp
   src/connection/udp_socket.cpp
   src/utils/csv_recorder.cpp
   src/utils/logger.cpp

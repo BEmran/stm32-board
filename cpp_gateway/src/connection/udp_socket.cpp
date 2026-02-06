@@ -8,7 +8,7 @@
 #include <cerrno>
 #include <cstring>
 
-namespace gateway {
+namespace connection {
 
 static bool set_nonblocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
@@ -42,7 +42,7 @@ UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
   return *this;
 }
 
-bool UdpSocket::bind_rx(uint16_t local_port, const std::string& local_addr, bool nonblocking) {
+bool UdpSocket::bind_rx(const std::string& local_addr, uint16_t local_port, bool nonblocking) {
   if (fd_ < 0) return false;
 
   int reuse = 1;
@@ -92,4 +92,4 @@ bool UdpSocket::try_recv(void* data, size_t len, size_t& out_nbytes) const {
   return true;
 }
 
-} // namespace gateway
+} // namespace connection

@@ -2,6 +2,7 @@
 #include "connection/udp_packets.hpp"
 #include "connection/udp_socket.hpp"
 #include "rosmaster/rosmaster.hpp"
+#include "utils/logger.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -11,67 +12,102 @@
 #include <iostream>
 #include <thread>
 
+constexpr int SERIAL_BAUD{115200};
+constexpr uint16_t DST_PORT{20001};
+constexpr uint16_t CMD_PORT{20002};
+constexpr double CMD_TIMEOUT{10.0}; // if no cmd received, stop motors
+constexpr int STATE_PUBLISH_FREQ{1};
+constexpr const char *SERIAL_DEV{"/dev/ttyUSB0"};
+constexpr const char *DST_IP{"192.168.68.111"};
+constexpr const char *LOCAL_IP{"0.0.0.0"};
+
 static std::atomic<bool> g_run{true};
 
 static void on_sigint(int) { g_run.store(false); }
 
-static int16_t clamp_i16(int v, int lo, int hi) {
-  if (v < lo) return (int16_t)lo;
-  if (v > hi) return (int16_t)hi;
+static int16_t clamp_i16(int v, int lo, int hi)
+{
+  if (v < lo)
+    return (int16_t)lo;
+  if (v > hi)
+    return (int16_t)hi;
   return (int16_t)v;
 }
 
-int main(int argc, char** argv) {
-  // ---- Defaults (edit to match your network) ----
-  std::string serial_dev = "/dev/ttyUSB0";
-  int serial_baud = 115200;
+struct Config
+{
+  std::string serial_dev{SERIAL_DEV};
+  int serial_baud{SERIAL_BAUD};
+  std::string local_ip{LOCAL_IP};
+  std::string dst_ip{DST_IP};
+  uint16_t dst_port{DST_PORT};
+  uint16_t cmd_port{CMD_PORT};
+  double hz{STATE_PUBLISH_FREQ};
+  double cmd_timeout_s{CMD_TIMEOUT};
+};
 
-  // Publish state to (dst_ip, dst_state_port)
-  std::string dst_ip = "192.168.68.111";
-  uint16_t dst_state_port = 20001;
-
-  // Receive commands on cmd_port (bind local)
-  std::string bind_ip = "0.0.0.0";
-  uint16_t cmd_port = 20002;
-
-  double hz = 10.0;
-  double cmd_timeout_s = 10.2; // if no cmd received, stop motors
-
+bool parse_config(int argc, char **argv, Config& config)
+{
   // Simple CLI:
   //  --serial /dev/ttyUSB0 --baud 115200
   //  --dst_ip 127.0.0.1 --state_port 25001
   //  --bind_ip 0.0.0.0 --cmd_port 25002
   //  --hz 200 --cmd_timeout 0.2
-  for (int i = 1; i < argc; i++) {
+  for (int i = 1; i < argc; i++)
+  {
     std::string a = argv[i];
-    auto need = [&](const char* name) -> std::string {
-      if (i + 1 >= argc) { std::cerr << "Missing value for " << name << "\n"; std::exit(2); }
+    auto need = [&](const char *name) -> std::string
+    {
+      if (i + 1 >= argc)
+      {
+        logger::error() << "Missing value for " << name << "\n";
+        std::exit(2);
+      }
       return std::string(argv[++i]);
     };
-    if (a == "--serial") serial_dev = need("--serial");
-    else if (a == "--baud") serial_baud = std::stoi(need("--baud"));
-    else if (a == "--dst_ip") dst_ip = need("--dst_ip");
-    else if (a == "--state_port") dst_state_port = (uint16_t)std::stoi(need("--state_port"));
-    else if (a == "--bind_ip") bind_ip = need("--bind_ip");
-    else if (a == "--cmd_port") cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
-    else if (a == "--hz") hz = std::stod(need("--hz"));
-    else if (a == "--cmd_timeout") cmd_timeout_s = std::stod(need("--cmd_timeout"));
-    else if (a == "--help") {
-      std::cout <<
-        "Usage: " << argv[0] << " [options]\n"
-        "  --serial /dev/ttyUSB0   Serial device\n"
-        "  --baud 115200           Serial baud\n"
-        "  --dst_ip 127.0.0.1      Where to send STATE UDP\n"
-        "  --state_port 25001      Destination STATE UDP port\n"
-        "  --bind_ip 0.0.0.0       Local bind IP for CMD UDP\n"
-        "  --cmd_port 25002        Local CMD UDP port (controller sends here)\n"
-        "  --hz 200                Gateway publish/apply rate\n"
-        "  --cmd_timeout 0.2       Seconds before safety stop if no cmd\n";
-      return 0;
-    } else {
-      std::cerr << "Unknown arg: " << a << "\n";
-      return 2;
+    if (a == "--serial")
+      config.serial_dev = need("--serial");
+    else if (a == "--baud")
+      config.serial_baud = std::stoi(need("--baud"));
+    else if (a == "--dst_ip")
+      config.dst_ip = need("--dst_ip");
+    else if (a == "--state_port")
+      config.dst_port = (uint16_t)std::stoi(need("--state_port"));
+    else if (a == "--bind_ip")
+      config.local_ip = need("--bind_ip");
+    else if (a == "--cmd_port")
+      config.cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
+    else if (a == "--hz")
+      config.hz = std::stoi(need("--hz"));
+    else if (a == "--cmd_timeout")
+      config.cmd_timeout_s = std::stod(need("--cmd_timeout"));
+    else if (a == "--help")
+    {
+      logger::info() << "Usage: " << argv[0] << " [options]\n"
+                                                "  --serial /dev/ttyUSB0   Serial device\n"
+                                                "  --baud 115200           Serial baud\n"
+                                                "  --dst_ip 127.0.0.1      Where to send STATE UDP\n"
+                                                "  --state_port 25001      Destination STATE UDP port\n"
+                                                "  --bind_ip 0.0.0.0       Local bind IP for CMD UDP\n"
+                                                "  --cmd_port 25002        Local CMD UDP port (controller sends here)\n"
+                                                "  --hz 200                connection publish/apply rate\n"
+                                                "  --cmd_timeout 0.2       Seconds before safety stop if no cmd\n";
+      return EXIT_FAILURE;
     }
+    else
+    {
+      std::cerr << "Unknown arg: " << a << "\n";
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int main(int argc, char **argv)
+{
+  Config config;
+  if (parse_config(argc, argv, config) == EXIT_FAILURE) {
+    return EXIT_FAILURE;
   }
 
   std::signal(SIGINT, on_sigint);
@@ -80,53 +116,60 @@ int main(int argc, char** argv) {
   // ---- Rosmaster ----
   rosmaster::Rosmaster bot;
   rosmaster::Config cfg;
-  cfg.device = serial_dev;
-  cfg.baud = serial_baud;
+  cfg.device = config.serial_dev;
+  cfg.baud = config.serial_baud;
   cfg.debug = false;
 
-  if (!bot.connect(cfg)) {
-    std::cerr << "[GW] Failed to connect to " << serial_dev << "\n";
+  if (!bot.connect(cfg))
+  {
+    logger::error() << "[GW] Failed to connect to " << cfg.device << "\n";
     return 1;
   }
   bot.start();
   bot.set_auto_report_state(true, false);
 
   // ---- UDP sockets ----
-  gateway::UdpSocket state_tx;
-  if (!state_tx.set_tx_destination(dst_ip, dst_state_port)) {
-    std::cerr << "[GW] Failed to set STATE destination " << dst_ip << ":" << dst_state_port << "\n";
+  connection::UdpSocket state_tx;
+  if (!state_tx.set_tx_destination(config.dst_ip, config.dst_port))
+  {
+    logger::error() << "[GW] Failed to set STATE destination " << config.dst_ip << ":" << config.dst_port << "\n";
     return 1;
   }
 
-  gateway::UdpSocket cmd_rx;
-  if (!cmd_rx.bind_rx(cmd_port, bind_ip, /*nonblocking=*/true)) {
-    std::cerr << "[GW] Failed to bind CMD RX on " << bind_ip << ":" << cmd_port << "\n";
+  connection::UdpSocket cmd_rx;
+  if (!cmd_rx.bind_rx(config.local_ip, config.cmd_port, /*nonblocking=*/true))
+  {
+    logger::error() << "[GW] Failed to bind CMD RX on " << config.local_ip << ":" << config.cmd_port << "\n";
     return 1;
   }
 
-  std::cout << "[GW] Serial=" << serial_dev << "@" << serial_baud
-            << " | STATE-> " << dst_ip << ":" << dst_state_port
-            << " | CMD<- " << bind_ip << ":" << cmd_port
-            << " | rate=" << hz << " Hz\n";
+  logger::info() << "[GW] Serial=" << config.serial_dev << "@" << config.serial_baud
+                 << " | STATE-> " << config.dst_ip << ":" << config.dst_port
+                 << " | CMD<- " << config.local_ip << ":" << config.cmd_port
+                 << " | rate=" << config.hz << " Hz\n";
 
   using clock = std::chrono::steady_clock;
-  const auto dt = std::chrono::duration<double>(1.0 / hz);
+  const auto dt = std::chrono::duration<double>(1.0 / config.hz);
   const auto t0 = clock::now();
   auto next = clock::now();
 
-  gateway::CmdPktV1 last_cmd{};
+  connection::CmdPktV1 last_cmd{};
   bool have_cmd = false;
   auto last_cmd_time = clock::now();
 
   uint32_t state_seq = 0;
 
-  while (g_run.load()) {
+  while (g_run.load())
+  {
     // ---- receive latest CMD (non-blocking) ----
-    for (;;) {
-      gateway::CmdPktV1 c{};
+    for (;;)
+    {
+      connection::CmdPktV1 c{};
       size_t n = 0;
-      if (!cmd_rx.try_recv(&c, sizeof(c), n)) break;
-      if (n == sizeof(c)) {
+      if (!cmd_rx.try_recv(&c, sizeof(c), n))
+        break;
+      if (n == sizeof(c))
+      {
         last_cmd = c;
         have_cmd = true;
         last_cmd_time = clock::now();
@@ -135,37 +178,21 @@ int main(int argc, char** argv) {
 
     // ---- safety timeout ----
     const double cmd_age = std::chrono::duration<double>(clock::now() - last_cmd_time).count();
-    const bool cmd_valid = have_cmd && (cmd_age <= cmd_timeout_s);
+    const bool cmd_valid = have_cmd && (cmd_age <= config.cmd_timeout_s);
 
     // ---- apply command to board ----
-    int m1=0,m2=0,m3=0,m4=0;
-    uint16_t beep_ms = 0;
-    if (cmd_valid) {
-      m1 = clamp_i16(last_cmd.m1, -100, 100);
-      m2 = clamp_i16(last_cmd.m2, -100, 100);
-      m3 = clamp_i16(last_cmd.m3, -100, 100);
-      m4 = clamp_i16(last_cmd.m4, -100, 100);
-      beep_ms = 0;
-    }
-    bot.set_motor(m1, m2, m3, m4);
-    if (beep_ms > 0) {
-      bot.set_beep((int)beep_ms);
-      // optional: clear to avoid repeating beep every cycle
-      last_cmd.beep_ms = 0;
-    }
 
+    core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
+    if (cmd_valid)
+    {
+      bot.apply_actions(actions);
+      actions.beep_ms = 0;
+    }
     // ---- publish state ----
     const core::State s = bot.get_state();
-    gateway::StatePktV1 pkt{};
-    pkt.seq = ++state_seq;
-    pkt.t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
-    pkt.ax = s.imu.acc.x; pkt.ay = s.imu.acc.y; pkt.az = s.imu.acc.z;
-    pkt.gx = s.imu.gyro.x; pkt.gy = s.imu.gyro.y; pkt.gz = s.imu.gyro.z;
-    pkt.mx = s.imu.mag.x; pkt.my = s.imu.mag.y; pkt.mz = s.imu.mag.z;
-    pkt.roll = s.ang.roll; pkt.pitch = s.ang.pitch; pkt.yaw = s.ang.yaw;
-    pkt.e1 = s.enc.e1; pkt.e2 = s.enc.e2; pkt.e3 = s.enc.e3; pkt.e4 = s.enc.e4;
-    pkt.battery_v = s.battery_voltage;
-
+    uint32_t seq = ++state_seq;
+    double t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
+    connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
     (void)state_tx.send(&pkt, sizeof(pkt));
 
     // ---- fixed-rate schedule ----
@@ -174,7 +201,7 @@ int main(int argc, char** argv) {
   }
 
   // safety stop on exit
-  bot.set_motor(0,0,0,0);
-  std::cout << "[GW] Exiting.\n";
+  bot.set_motor(0, 0, 0, 0);
+  logger::info() << "[GW] Exiting.\n";
   return 0;
 }
