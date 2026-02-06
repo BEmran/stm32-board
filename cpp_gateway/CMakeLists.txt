@@ -23,5 +23,8 @@ target_link_libraries(demo PRIVATE rosmaster)
 add_executable(udp_gateway app/udp_gateway.cpp)
 target_link_libraries(udp_gateway PRIVATE rosmaster)
 
+add_executable(udp_client app/udp_client.cpp)
+target_link_libraries(udp_client PRIVATE rosmaster)
+
 add_executable(demo_recorder app/demo_recorder.cpp)
 target_link_libraries(demo_recorder PRIVATE rosmaster)
