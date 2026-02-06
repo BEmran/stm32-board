@@ -184,13 +184,13 @@ private:
     }
 
     log_files_[level_index(Level::Error)] =
-      log_dir_ / (date_str_ + "_error.log");
+      log_dir_ / ("error_" + date_str_ + ".log");
     log_files_[level_index(Level::Warn)] =
-      log_dir_ / (date_str_ + "_warn.log");
+      log_dir_ / ("warn_" + date_str_ + ".log");
     log_files_[level_index(Level::Info)] =
-      log_dir_ / (date_str_ + "_info.log");
+      log_dir_ / ("info_" + date_str_ + ".log");
     log_files_[level_index(Level::Debug)] =
-      log_dir_ / (date_str_ + "_debug.log");
+      log_dir_ / ("error_" + date_str_ + ".log");
 
     initialized_ = true;
   }

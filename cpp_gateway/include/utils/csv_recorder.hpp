@@ -115,24 +115,6 @@ public:
         return csv_path_; 
     }
 
-    // Utility functions for timestamp generation
-    
-    /**
-     * @brief Get current timestamps
-     * @return Timestamps with epoch and monotonic time
-     */
-    [[nodiscard]] static core::Timestamps now() noexcept;
-
-    /**
-     * @brief Get epoch timestamp in seconds
-     */
-    [[nodiscard]] static double epoch_now() noexcept;
-
-    /**
-     * @brief Get monotonic timestamp in seconds
-     */
-    [[nodiscard]] static double monotonic_now() noexcept;
-
 private:
     /**
      * @brief Build file path with timestamp

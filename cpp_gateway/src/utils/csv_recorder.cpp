@@ -1,7 +1,6 @@
 #include "utils/csv_recorder.hpp"
+#include "utils/timestamp.h"
 
-#include <chrono>
-#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
@@ -47,21 +46,8 @@ std::filesystem::path CSVRecorder::build_path(
                   << ": " << ec.message() << '\n';
     }
 
-    // Generate timestamp for filename
-    auto now = std::chrono::system_clock::now();
-    auto time_t_now = std::chrono::system_clock::to_time_t(now);
-    
-    std::tm tm_buf{};
-    #ifdef _WIN32
-        localtime_s(&tm_buf, &time_t_now);
-    #else
-        localtime_r(&time_t_now, &tm_buf);
-    #endif
-
-    std::ostringstream timestamp;
-    timestamp << std::put_time(&tm_buf, "%Y-%m-%d_%H-%M-%S");
-
     // Build filename
+    std::ostringstream timestamp = timestamp_string(); 
     std::string filename;
     if (!prefix.empty()) {
         filename = std::string(prefix) + "_" + timestamp.str() + ".csv";
@@ -217,30 +203,6 @@ void CSVRecorder::close() noexcept {
             std::cerr << "Error closing CSV file: " << e.what() << '\n';
         }
     }
-}
-
-// Static timestamp utilities
-
-core::Timestamps CSVRecorder::now() noexcept {
-    return {
-        .epoch_s = epoch_now(),
-        .mono_s = monotonic_now()
-    };
-}
-
-double CSVRecorder::epoch_now() noexcept {
-    using namespace std::chrono;
-    auto now = system_clock::now();
-    auto duration = now.time_since_epoch();
-    return duration_cast<std::chrono::duration<double>>(duration).count();
-           
-}
-
-double CSVRecorder::monotonic_now() noexcept {
-    using namespace std::chrono;
-    auto now = steady_clock::now();
-    auto duration = now.time_since_epoch();
-    return duration_cast<std::chrono::duration<double>>(duration).count();
 }
 
 } // namespace utils
