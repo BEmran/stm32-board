@@ -6,7 +6,7 @@ import threading
 import time
 
 from config_options import load_config_options
-from protocol import Actions, STATE_STRUCT, parse_state_pkt, prepare_cmd_pkt
+from protocol import Actions, STATE_STRUCT, parse_state_pkt, prepare_cmd_pkt, print_states
 from tcp import recv_exact
 
 
@@ -22,11 +22,7 @@ def rx_loop(sock: socket.socket, print_hz: float, stop: threading.Event) -> None
             now = time.time()
             if now - last_print >= min_dt:
                 last_print = now
-                print(
-                    f"[PC] STATE seq={state.seq} t_mono={t_mono:.6f} "
-                    f"roll={state.ang.roll:.2f} pitch={state.ang.pitch:.2f} yaw={state.ang.yaw:.2f} "
-                    f"enc1={state.enc.e1} enc2={state.enc.e2} enc3={state.enc.e3} enc4={state.enc.e4}"
-                )
+                print_states(state)
     except ConnectionError:
         print("[PC] RX stopped: server closed")
         stop.set()
@@ -40,7 +36,11 @@ def tx_loop(sock: socket.socket, rate_hz: float, stop: threading.Event) -> None:
             seq += 1
             actions = Actions()
             actions.seq = seq
-            sock.sendall(prepare_cmd_pkt(actions))
+            pkt = prepare_cmd_pkt(actions)
+            # print(pkt)
+            # print(len(pkt))
+            sock.sendall(pkt)
+            # print("send")
             time.sleep(dt)
     except OSError:
         stop.set()
@@ -54,16 +54,22 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    host = cfg.udp.local_ip or "127.0.0.1"
-    port = cfg.tcp.port
+    host = "192.168.68.101"
+    state_port = cfg.tcp.state_port
+    cmd_port = cfg.tcp.cmd_port
 
-    print(f"[PC] Connecting to {host}:{port}")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((host, port))
-    print("[PC] Connected")
+    print(f"[PC] Connecting STATE to {host}:{state_port}")
+    state_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    state_sock.connect((host, state_port))
+    print("[PC] STATE connected")
+
+    print(f"[PC] Connecting CMD to {host}:{cmd_port}")
+    cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cmd_sock.connect((host, cmd_port))
+    print("[PC] CMD connected")
 
     stop = threading.Event()
-    rx_thread = threading.Thread(target=rx_loop, args=(sock, args.print_hz, stop), daemon=True)
+    rx_thread = threading.Thread(target=rx_loop, args=(state_sock, args.print_hz, stop), daemon=True)
     rx_thread.start()
 
     try:
@@ -71,11 +77,14 @@ def main() -> None:
             while not stop.is_set():
                 time.sleep(0.2)
         else:
-            tx_loop(sock, args.cmd_rate_hz, stop)
+            tx_loop(cmd_sock, args.cmd_rate_hz, stop)
     except KeyboardInterrupt:
         stop.set()
     finally:
-        sock.close()
+        try:
+            state_sock.close()
+        finally:
+            cmd_sock.close()
         print("[PC] Closed")
 
 
