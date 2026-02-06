@@ -36,7 +36,11 @@ def tx_loop(sock: socket.socket, rate_hz: float, stop: threading.Event) -> None:
             seq += 1
             actions = Actions()
             actions.seq = seq
-            sock.sendall(prepare_cmd_pkt(actions))
+            pkt = prepare_cmd_pkt(actions)
+            # print(pkt)
+            # print(len(pkt))
+            sock.sendall(pkt)
+            # print("send")
             time.sleep(dt)
     except OSError:
         stop.set()
@@ -50,16 +54,16 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    host = "127.0.0.1"
-    port = 30001
+    host = cfg.udp.local_ip or "127.0.0.1"
+    port = cfg.tcp.port
 
-    print(f"[PC] Connecting to {host}:{port}")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((host, port))
-    print("[PC] Connected")
+    print(f"[PC] Connecting CMD to {host}:{cmd_port}")
+    cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cmd_sock.connect((host, cmd_port))
+    print("[PC] CMD connected")
 
     stop = threading.Event()
-    rx_thread = threading.Thread(target=rx_loop, args=(sock, args.print_hz, stop), daemon=True)
+    rx_thread = threading.Thread(target=rx_loop, args=(state_sock, args.print_hz, stop), daemon=True)
     rx_thread.start()
 
     try:
@@ -67,11 +71,14 @@ def main() -> None:
             while not stop.is_set():
                 time.sleep(0.2)
         else:
-            tx_loop(sock, args.cmd_rate_hz, stop)
+            tx_loop(cmd_sock, args.cmd_rate_hz, stop)
     except KeyboardInterrupt:
         stop.set()
     finally:
-        sock.close()
+        try:
+            state_sock.close()
+        finally:
+            cmd_sock.close()
         print("[PC] Closed")
 
 

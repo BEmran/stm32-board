@@ -3,7 +3,7 @@
 
 STATE (56 bytes):
   < I d  f f f  f f f  f f f  f f f  i i i i f
-    seq, t_mono, ax,ay,az, gx,gy,gz, mx,my,mz r,p,y, enc1,enc2,enc3,enc4, battery
+    seq, t_mono, ax,ay,az, gx,gy,gz, mx,my,mz r,p,y, enc1,enc2,enc3,enc4,battery
 
 CMD (12 bytes):
   < I H H H H H B
@@ -65,7 +65,7 @@ def prepare_state_pkt(state: State, now_mono: float = 0.0) -> bytes:
         float(state.imu.gyro.x), float(state.imu.gyro.y), float(state.imu.gyro.z),
         float(state.imu.mag.x), float(state.imu.mag.y), float(state.imu.mag.z),
         float(state.ang.roll), float(state.ang.pitch), float(state.ang.yaw),
-        int(state.enc.e1), int(state.enc.e2), int(state.enc.e3), int(state.enc.e4), float(state.bettery),
+        int(state.enc.e1), int(state.enc.e2), int(state.enc.e3), int(state.enc.e4), float(state.battery),
     )
     return pkt
 
@@ -113,6 +113,7 @@ def parse_state_pkt(pkt: bytes) -> State:
     state.enc.e2 = int(unpacked[15])
     state.enc.e3 = int(unpacked[16])
     state.enc.e4 = int(unpacked[17])
+    state.enc.e4 = int(unpacked[17])
     state.battery = float(unpacked[18])
     return t_mono, state
 
@@ -122,7 +123,8 @@ def print_states(state: State):
           f'gx={state.imu.gyro.x:+7.2f} gy={state.imu.gyro.y:+7.2f} gz={state.imu.gyro.z:+7.2f} '
           f'mx={state.imu.mag.x:+7.2f} my={state.imu.mag.y:+7.2f} mz={state.imu.mag.z:+7.2f} '
           f'roll={state.ang.roll:+7.2f} pitch={state.ang.pitch:+7.2f} yaw={state.ang.yaw:+7.2f} '
-          f'enc1={state.enc.e1:4} enc2={state.enc.e2:4} enc3={state.enc.e3:4} enc4={state.enc.e4:4} battery={state.battery:7.2f}')
+          f'enc1={state.enc.e1:4} enc2={state.enc.e2:4} enc3={state.enc.e3:4} enc4={state.enc.e4:4} '
+          f'battery={state.battery:+7.2f}')
 
 def print_actions(actions: Actions):
     print(f'seq={actions.seq:8} '
