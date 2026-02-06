@@ -40,7 +40,7 @@ struct CmdPktV1 {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(CmdPktV1) == 15, "CmdPktV1 must be 16 bytes");
+static_assert(sizeof(CmdPktV1) == 15, "CmdPktV1 must be 15 bytes");
 
 StatePktV1 state_to_state_pktv1(uint32_t seq, double t_mono_s, core::State state);
 core::Actions cmd_pktv1_to_actions(CmdPktV1 pkt);
