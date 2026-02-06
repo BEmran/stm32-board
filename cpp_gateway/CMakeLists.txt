@@ -8,6 +8,7 @@ add_library(rosmaster
   src/core/basic.cpp
   src/rosmaster/rosmaster.cpp
   src/connection/serial_port.cpp
+  src/connection/tcp_socket.cpp
   src/connection/udp_packets.cpp
   src/connection/udp_socket.cpp
   src/utils/csv_recorder.cpp
@@ -28,3 +29,6 @@ target_link_libraries(udp_client PRIVATE rosmaster)
 
 add_executable(demo_recorder app/demo_recorder.cpp)
 target_link_libraries(demo_recorder PRIVATE rosmaster)
+
+add_executable(tcp_client app/tcp_client.cpp)
+target_link_libraries(tcp_client PRIVATE rosmaster)
