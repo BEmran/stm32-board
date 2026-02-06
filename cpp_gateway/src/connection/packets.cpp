@@ -1,5 +1,5 @@
 
-#include "connection/udp_packets.hpp"
+#include "connection/packets.hpp"
 
 namespace connection
 {

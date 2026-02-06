@@ -1,5 +1,5 @@
 #include "connection/tcp_socket.hpp"
-#include "connection/udp_packets.hpp"
+#include "connection/packets.hpp"
 #include "rosmaster/rosmaster.hpp"
 #include "utils/logger.hpp"
 
@@ -73,7 +73,7 @@ bool parse_config(int argc, char **argv, Config& config) {
                                         "  --cmd_timeout 0.2       Seconds before safety stop if no cmd\n";
       return EXIT_FAILURE;
     } else {
-      std::cerr << "Unknown arg: " << a << "\n";
+      logger::error() << "Unknown arg: " << a << "\n";
       return EXIT_FAILURE;
     }
   }

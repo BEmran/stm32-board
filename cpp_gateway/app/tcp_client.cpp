@@ -1,5 +1,5 @@
 #include "connection/tcp_socket.hpp"
-#include "connection/udp_packets.hpp"
+#include "connection/packets.hpp"
 #include "utils/logger.hpp"
 
 #include <atomic>
@@ -48,7 +48,7 @@ bool parse_config(int argc, char **argv, Config &config) {
                                         "  --print_hz 1             Print rate (Hz, 0=off)\n";
       return EXIT_FAILURE;
     } else {
-      std::cerr << "Unknown arg: " << a << "\n";
+      logger::error() << "Unknown arg: " << a << "\n";
       return EXIT_FAILURE;
     }
   }
