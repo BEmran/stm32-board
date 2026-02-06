@@ -9,7 +9,7 @@
 
 using namespace std::chrono_literals;
 constexpr double PRINT_DURATION = 1.0;
-
+constexpr std::string_view RECORDER_PATH{"./recorder"};
 bool should_print(double duration) {
   static double last = utils::monotonic_now();
   double now = utils::monotonic_now();
@@ -37,8 +37,8 @@ int main() {
   logger::debug() << "Version: " << bot.get_version() << "\n";
 
   // Create recorder
-  utils::CSVRecorder actions_recorder("./recorder/cmd", "actions", headers::ACTIONS);
-  utils::CSVRecorder state_recorder("./recorder/state", "state", headers::STATE);
+  utils::CSVRecorder actions_recorder(RECORDER_PATH, "actions", headers::ACTIONS);
+  utils::CSVRecorder state_recorder(RECORDER_PATH, "state", headers::STATE);
   
   // Open the recorder
   if (!actions_recorder.open() or !state_recorder.open()) {

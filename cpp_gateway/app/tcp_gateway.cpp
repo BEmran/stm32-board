@@ -1,5 +1,6 @@
 #include "connection/tcp_socket.hpp"
 #include "connection/packets.hpp"
+#include "connection/framed.hpp"
 #include "rosmaster/rosmaster.hpp"
 #include "utils/logger.hpp"
 
@@ -13,24 +14,20 @@
 #include <vector>
 
 constexpr int SERIAL_BAUD{115200};
-constexpr uint16_t STATE_PORT{20001};
-constexpr uint16_t CMD_PORT{20002};
-constexpr double CMD_TIMEOUT{10.0}; // if no cmd received, stop motors
-constexpr int STATE_PUBLISH_FREQ{1};
+constexpr uint16_t PORT{30001};
+constexpr double CMD_TIMEOUT{0.2};     // if no cmd received, stop motors
+constexpr int STATE_PUBLISH_FREQ{200}; // Hz
 constexpr const char *SERIAL_DEV{"/dev/ttyUSB0"};
 constexpr const char *BIND_IP{"0.0.0.0"};
 
 static std::atomic<bool> g_run{true};
-
 static void on_sigint(int) { g_run.store(false); }
 
-struct Config
-{
+struct Config {
   std::string serial_dev{SERIAL_DEV};
   int serial_baud{SERIAL_BAUD};
   std::string bind_ip{BIND_IP};
-  uint16_t state_port{STATE_PORT};
-  uint16_t cmd_port{CMD_PORT};
+  uint16_t port{PORT};
   double hz{STATE_PUBLISH_FREQ};
   double cmd_timeout_s{CMD_TIMEOUT};
 };
@@ -39,8 +36,11 @@ bool parse_config(int argc, char **argv, Config &config)
 {
   // Simple CLI:
   //  --serial /dev/ttyUSB0 --baud 115200
-  //  --bind_ip 0.0.0.0 --state_port 20001 --cmd_port 20002
+  //  --bind_ip 0.0.0.0 --port 30001
   //  --hz 200 --cmd_timeout 0.2
+  //
+  // Back-compat:
+  //  --state_port is treated as --port (cmd_port is ignored)
   for (int i = 1; i < argc; i++)
   {
     std::string a = argv[i];
@@ -53,53 +53,42 @@ bool parse_config(int argc, char **argv, Config &config)
       }
       return std::string(argv[++i]);
     };
-    if (a == "--serial")
-      config.serial_dev = need("--serial");
-    else if (a == "--baud")
-      config.serial_baud = std::stoi(need("--baud"));
-    else if (a == "--bind_ip")
-      config.bind_ip = need("--bind_ip");
-    else if (a == "--state_port")
-      config.state_port = (uint16_t)std::stoi(need("--state_port"));
-    else if (a == "--cmd_port")
-      config.cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
-    else if (a == "--hz")
-      config.hz = std::stoi(need("--hz"));
-    else if (a == "--cmd_timeout")
-      config.cmd_timeout_s = std::stod(need("--cmd_timeout"));
+
+    if (a == "--serial")      config.serial_dev = need("--serial");
+    else if (a == "--baud")   config.serial_baud = std::stoi(need("--baud"));
+    else if (a == "--bind_ip")config.bind_ip = need("--bind_ip");
+    else if (a == "--port")   config.port = (uint16_t)std::stoi(need("--port"));
+    else if (a == "--state_port") config.port = (uint16_t)std::stoi(need("--state_port"));
+    else if (a == "--cmd_port")   { (void)need("--cmd_port"); /*ignored*/ }
+    else if (a == "--hz")     config.hz = std::stod(need("--hz"));
+    else if (a == "--cmd_timeout") config.cmd_timeout_s = std::stod(need("--cmd_timeout"));
     else if (a == "--help")
     {
-      logger::info() << "Usage: " << argv[0] << " [options]\n"
-                                                "  --serial /dev/ttyUSB0   Serial device\n"
-                                                "  --baud 115200           Serial baud\n"
-                                                "  --bind_ip 0.0.0.0       Local bind IP\n"
-                                                "  --state_port 20001      TCP STATE port\n"
-                                                "  --cmd_port 20002        TCP CMD port\n"
-                                                "  --hz 200                publish/apply rate\n"
-                                                "  --cmd_timeout 0.2       Seconds before safety stop if no cmd\n";
-      return EXIT_FAILURE;
-    }
-    else
-    {
-      logger::error() << "Unknown arg: " << a << "\n";
-      return EXIT_FAILURE;
+      logger::info()
+          << "Usage: " << argv[0] << " [options]\n"
+          << "  --serial /dev/ttyUSB0   Serial device\n"
+          << "  --baud 115200           Serial baud\n"
+          << "  --bind_ip 0.0.0.0       Local bind IP\n"
+          << "  --port 30001            TCP port (single connection for STATE+CMD)\n"
+          << "  --hz 200                STATE publish rate\n"
+          << "  --cmd_timeout 0.2       Command timeout (seconds)\n";
+      return false;
     }
   }
-  return EXIT_SUCCESS;
+  if (config.hz <= 0.0) config.hz = STATE_PUBLISH_FREQ;
+  if (config.cmd_timeout_s <= 0.0) config.cmd_timeout_s = CMD_TIMEOUT;
+  return true;
 }
 
 int main(int argc, char **argv)
 {
   Config config;
-  if (parse_config(argc, argv, config) == EXIT_FAILURE)
-  {
-    return EXIT_FAILURE;
-  }
+  if (!parse_config(argc, argv, config))
+    return 0;
 
   std::signal(SIGINT, on_sigint);
   std::signal(SIGTERM, on_sigint);
 #ifdef SIGPIPE
-  // Prevent SIGPIPE from terminating the process on send() to a closed socket.
   std::signal(SIGPIPE, SIG_IGN);
 #endif
 
@@ -118,34 +107,22 @@ int main(int argc, char **argv)
   bot.start();
   bot.set_auto_report_state(true, false);
 
-  // ---- TCP servers ----
-  connection::TcpSocket state_srv;
-  if (!state_srv.bind_listen(config.bind_ip, config.state_port, /*backlog=*/1))
+  // ---- TCP server (single client) ----
+  connection::TcpSocket srv;
+  if (!srv.bind_listen(config.bind_ip, config.port, /*backlog=*/1))
   {
-    logger::error() << "[TCP_GW] Failed to bind STATE on " << config.bind_ip
-                    << ":" << config.state_port << "\n";
+    logger::error() << "[TCP_GW] Failed to bind on " << config.bind_ip
+                    << ":" << config.port << "\n";
     return 1;
   }
-  state_srv.set_nonblocking(true);
-
-  connection::TcpSocket cmd_srv;
-  if (!cmd_srv.bind_listen(config.bind_ip, config.cmd_port, /*backlog=*/1))
-  {
-    logger::error() << "[TCP_GW] Failed to bind CMD on " << config.bind_ip
-                    << ":" << config.cmd_port << "\n";
-    return 1;
-  }
-  cmd_srv.set_nonblocking(true);
+  srv.set_nonblocking(true);
 
   logger::info() << "[TCP_GW] Serial=" << config.serial_dev << "@" << config.serial_baud
-                 << " | STATE: " << config.bind_ip << ":" << config.state_port
-                 << " | CMD: " << config.bind_ip << ":" << config.cmd_port
+                 << " | TCP: " << config.bind_ip << ":" << config.port
                  << " | rate=" << config.hz << " Hz\n";
 
-  connection::TcpSocket state_client;
-  connection::TcpSocket cmd_client;
-  std::vector<uint8_t> cmd_buf;
-  cmd_buf.reserve(sizeof(connection::CmdPktV1) * 4);
+  connection::TcpSocket client;
+  connection::FrameRx frx;
 
   using clock = std::chrono::steady_clock;
   const auto dt = std::chrono::duration<double>(1.0 / config.hz);
@@ -154,88 +131,94 @@ int main(int argc, char **argv)
 
   connection::CmdPktV1 last_cmd{};
   bool have_cmd = false;
+  bool last_cmd_valid = false;
   auto last_cmd_time = clock::now();
   uint32_t state_seq = 0;
 
   while (g_run.load())
   {
-    // ---- accept clients (non-blocking) ----
-    if (!state_client.is_open())
+    // ---- accept client ----
+    if (!client.is_open())
     {
-      if (state_srv.accept_client(state_client, /*nonblocking=*/false))
+      if (srv.accept_client(client, /*nonblocking=*/true))
       {
-        logger::info() << "[TCP_GW] STATE client connected.\n";
-      }
-    }
-    if (!cmd_client.is_open())
-    {
-      if (cmd_srv.accept_client(cmd_client, /*nonblocking=*/true))
-      {
-        logger::info() << "[TCP_GW] CMD client connected.\n";
-        cmd_buf.clear();
+        logger::info() << "[TCP_GW] client connected.\n";
+        frx.clear();
+        have_cmd = false;
+        last_cmd_valid = false;
+        last_cmd_time = clock::now();
       }
     }
 
-    // ---- receive latest CMD (non-blocking, stream framing) ----
-    if (cmd_client.is_open())
+    // ---- receive framed CMD messages (non-blocking) ----
+    if (client.is_open())
     {
-      uint8_t tmp[256];
+      uint8_t tmp[1024];
       size_t n = 0;
-      if (cmd_client.try_recv(tmp, sizeof(tmp), n))
+      if (client.try_recv(tmp, sizeof(tmp), n))
       {
         if (n == 0)
         {
-          cmd_client.close();
-          logger::warn() << "[TCP_GW] CMD client disconnected.\n";
+          client.close();
+          logger::warn() << "[TCP_GW] client disconnected.\n";
         }
         else
         {
-          cmd_buf.insert(cmd_buf.end(), tmp, tmp + n);
-          logger::debug() << cmd_buf.data();
-          while (cmd_buf.size() >= sizeof(connection::CmdPktV1))
+          frx.push_bytes(tmp, n);
+
+          uint8_t type = 0;
+          std::vector<uint8_t> payload;
+          while (frx.pop(type, payload))
           {
-            connection::CmdPktV1 c{};
-            std::memcpy(&c, cmd_buf.data(), sizeof(c));
-            cmd_buf.erase(cmd_buf.begin(), cmd_buf.begin() + sizeof(c));
-            last_cmd = c;
-            have_cmd = true;
-            last_cmd_time = clock::now();
+            if (type == connection::MSG_CMD && payload.size() == sizeof(connection::CmdPktV1))
+            {
+              connection::CmdPktV1 c{};
+              std::memcpy(&c, payload.data(), sizeof(c));
+              last_cmd = c;
+              have_cmd = true;
+              last_cmd_time = clock::now();
+            }
+            // ignore other frames
           }
         }
       }
-      logger::info() << "size n: " << n;
     }
 
-    // ---- safety timeout ----
+    // ---- command validity + timeout safety ----
     const double cmd_age = std::chrono::duration<double>(clock::now() - last_cmd_time).count();
     const bool cmd_valid = have_cmd && (cmd_age <= config.cmd_timeout_s);
-    
-    // ---- apply command to board ----
-    core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
+
     if (cmd_valid)
     {
-      logger::info() << "received cmd, " << " seq=" << last_cmd.seq << " m1:" << last_cmd.m1 << " m2:" << last_cmd.m2 << " m3:" << last_cmd.m3 << " m4:" << last_cmd.m4 << " beep_ms=" << last_cmd.beep_ms << " flags=" << last_cmd.flags;
-
+      core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
+      logger::info() << "seq: " << last_cmd.seq << " m1: " << actions.motors.m1 << " m2: " << actions.motors.m2 << " m3: " << actions.motors.m3 << " m4: " << actions.motors.m4
+      << " beep: " << actions.beep_ms << " flag: " << actions.flags;
       bot.apply_actions(actions);
-      actions.beep_ms = 0;
+      if (!last_cmd_valid)
+        logger::info() << "[TCP_GW] CMD valid.\n";
+      last_cmd_valid = true;
     }
     else
     {
-      logger::warn() << "the received cmd is invalid";
+      if (last_cmd_valid)
+        logger::warn() << "[TCP_GW] CMD timeout -> motors stop.\n";
+      bot.set_motor(0, 0, 0, 0);
+      last_cmd_valid = false;
     }
 
-    // ---- publish state ----
+    // ---- publish framed STATE ----
     const core::State s = bot.get_state();
-    uint32_t seq = ++state_seq;
-    float t_mono_s = std::chrono::duration<float>(clock::now() - t0).count();
-    connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
+    const uint32_t seq = ++state_seq;
+    const float t_mono_s = std::chrono::duration<float>(clock::now() - t0).count();
+    const connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
 
-    if (state_client.is_open())
+    if (client.is_open())
     {
-      if (!state_client.send_all(&pkt, sizeof(pkt)))
+      const connection::MsgHdr h = connection::make_hdr(connection::MSG_STATE, (uint16_t)sizeof(pkt));
+      if (!client.send_all(&h, sizeof(h)) || !client.send_all(&pkt, sizeof(pkt)))
       {
-        state_client.close();
-        logger::warn() << "[TCP_GW] STATE client disconnected.\n";
+        client.close();
+        logger::warn() << "[TCP_GW] client disconnected (send failed).\n";
       }
     }
 

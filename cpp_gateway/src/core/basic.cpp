@@ -22,7 +22,6 @@ Vec3d scale_vec3d(Vec3d in, float scale) {
 
 Vec3d rearrange_gyro(Vec3d in) {
   Vec3d out;
-  out.x = +in.x;
   out.y = -in.y;
   out.z = -in.z;
   return out;

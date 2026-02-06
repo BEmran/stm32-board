@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <poll.h>
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
@@ -108,9 +109,21 @@ bool TcpSocket::send_all(const void* data, size_t len) const {
   const uint8_t* p = static_cast<const uint8_t*>(data);
   size_t sent = 0;
   while (sent < len) {
-    const ssize_t n = ::send(fd_, p + sent, len - sent, 0);
-    if (n <= 0) return false;
-    sent += static_cast<size_t>(n);
+    const ssize_t n = ::send(fd_, p + sent, len - sent, MSG_NOSIGNAL);
+    if (n > 0) {
+      sent += static_cast<size_t>(n);
+      continue;
+    }
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      // wait until writable
+      ::pollfd fds{};
+      fds.fd = fd_;
+      fds.events = POLLOUT;
+      const int rc = ::poll(&fds, 1, 50);
+      if (rc <= 0) return false;
+      continue;
+    }
+    return false; // other error
   }
   return true;
 }

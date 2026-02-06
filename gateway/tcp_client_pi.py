@@ -54,8 +54,8 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    host = cfg.udp.local_ip or "127.0.0.1"
-    port = cfg.tcp.port
+    host = "127.0.0.1"
+    cmd_port = 30002
 
     print(f"[PC] Connecting CMD to {host}:{cmd_port}")
     cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
