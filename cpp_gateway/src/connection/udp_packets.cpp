@@ -4,7 +4,7 @@
 namespace connection
 {
 
-  StatePktV1 state_to_state_pktv1(uint32_t seq, double t_mono_s, core::State state)
+  StatePktV1 state_to_state_pktv1(uint32_t seq, float t_mono_s, core::State state)
   {
     return StatePktV1{
         .seq = seq,

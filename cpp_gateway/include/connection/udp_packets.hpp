@@ -12,7 +12,7 @@ namespace connection {
 #pragma pack(push, 1)
 struct StatePktV1 {
   uint32_t seq;      // incrementing sequence number
-  double   t_mono_s; // steady clock seconds since start (monotonic)
+  float   t_mono_s; // steady clock seconds since start (monotonic)
 
   // IMU raw (already scaled by Rosmaster parsing)
   float ax, ay, az;
@@ -29,7 +29,7 @@ struct StatePktV1 {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(StatePktV1) == 80, "StatePktV1 must be 80 bytes");
+static_assert(sizeof(StatePktV1) == 76, "StatePktV1 must be 80 bytes");
 
 #pragma pack(push, 1)
 struct CmdPktV1 {
@@ -42,6 +42,6 @@ struct CmdPktV1 {
 
 static_assert(sizeof(CmdPktV1) == 15, "CmdPktV1 must be 15 bytes");
 
-StatePktV1 state_to_state_pktv1(uint32_t seq, double t_mono_s, core::State state);
+StatePktV1 state_to_state_pktv1(uint32_t seq, float t_mono_s, core::State state);
 core::Actions cmd_pktv1_to_actions(CmdPktV1 pkt);
 } // namespace connection

@@ -88,6 +88,10 @@ int main(int argc, char **argv) {
 
   std::signal(SIGINT, on_sigint);
   std::signal(SIGTERM, on_sigint);
+#ifdef SIGPIPE
+  // Prevent SIGPIPE from terminating the process on send() to a closed socket.
+  std::signal(SIGPIPE, SIG_IGN);
+#endif
 
   // ---- Rosmaster ----
   rosmaster::Rosmaster bot;
@@ -190,7 +194,7 @@ int main(int argc, char **argv) {
     // ---- publish state ----
     const core::State s = bot.get_state();
     uint32_t seq = ++state_seq;
-    double t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
+    float t_mono_s = std::chrono::duration<float>(clock::now() - t0).count();
     connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
 
     if (state_client.is_open()) {
