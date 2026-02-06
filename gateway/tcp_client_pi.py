@@ -54,8 +54,8 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    host = "127.0.0.1"
-    cmd_port = 30002
+    host = "192.168.68.101"
+    cmd_port = 30001
 
     print(f"[PC] Connecting CMD to {host}:{cmd_port}")
     cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -63,7 +63,7 @@ def main() -> None:
     print("[PC] CMD connected")
 
     stop = threading.Event()
-    rx_thread = threading.Thread(target=rx_loop, args=(state_sock, args.print_hz, stop), daemon=True)
+    rx_thread = threading.Thread(target=rx_loop, args=(cmd_sock, args.print_hz, stop), daemon=True)
     rx_thread.start()
 
     try:
@@ -76,7 +76,7 @@ def main() -> None:
         stop.set()
     finally:
         try:
-            state_sock.close()
+            cmd_sock.close()
         finally:
             cmd_sock.close()
         print("[PC] Closed")
