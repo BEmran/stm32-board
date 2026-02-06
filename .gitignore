@@ -1,6 +1,6 @@
-logs/
-records/
+**/logs/
+**/records/
+**/build/
 __pycache__/
-*/build/
 build/
 .vscode/
