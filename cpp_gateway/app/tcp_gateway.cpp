@@ -239,7 +239,7 @@ int main(int argc, char **argv)
         if (n == 0)
         {
           cmd_client.close();
-          logger::warn() << "[TCP_GW] CMD client disconnected.\n";
+          logger::warn() << "[TCP_GW] CMD client disconnected.";
         }
         else
         {
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
               last_cmd = c;
               have_cmd = true;
               last_cmd_time = clock::now();
-              // logger::debug() << "[TCP_GW] got CMD seq=" << c.seq << "\n";
+              logger::debug() << "[TCP_GW] got CMD seq=" << c.seq;
             }
             // ignore other frames
           }
@@ -278,15 +278,15 @@ int main(int argc, char **argv)
         logger::info() << "[TCP_GW] CMD valid.\n";
       last_cmd_valid = true;
 
-      if (should_print(last_motor_log, config.motor_log_hz, now))
-      {
+      // if (should_print(last_motor_log, config.motor_log_hz, now))
+      // {
         logger::info()
             << "[TCP_GW] CMD seq=" << last_cmd.seq
             << " motors=(" << actions.motors.m1 << "," << actions.motors.m2
             << "," << actions.motors.m3 << "," << actions.motors.m4 << ")"
             << " beep=" << actions.beep_ms
             << " flags=" << actions.flags << "\n";
-      }
+      // }
     }
     else
     {

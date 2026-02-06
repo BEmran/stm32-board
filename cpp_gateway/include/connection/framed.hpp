@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <iostream>
 #include <arpa/inet.h>
 
 namespace connection {
@@ -65,7 +66,9 @@ public:
     }
 
     if (buf_.size() < total) return false;
-
+    for (auto i = 0; i < total; i++)
+      std::cout << buf_[i];
+    std::cout << "\n";
     out_type = h.type;
     out_payload.assign(buf_.begin() + sizeof(MsgHdr), buf_.begin() + total);
     buf_.erase(buf_.begin(), buf_.begin() + total);

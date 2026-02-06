@@ -190,7 +190,7 @@ private:
     log_files_[level_index(Level::Info)] =
       log_dir_ / ("info_" + date_str_ + ".log");
     log_files_[level_index(Level::Debug)] =
-      log_dir_ / ("error_" + date_str_ + ".log");
+      log_dir_ / ("debug_" + date_str_ + ".log");
 
     initialized_ = true;
   }
