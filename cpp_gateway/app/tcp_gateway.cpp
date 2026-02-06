@@ -162,7 +162,7 @@ int main(int argc, char **argv)
     // ---- accept clients (non-blocking) ----
     if (!state_client.is_open())
     {
-      if (state_srv.accept_client(state_client, /*nonblocking=*/true))
+      if (state_srv.accept_client(state_client, /*nonblocking=*/false))
       {
         logger::info() << "[TCP_GW] STATE client connected.\n";
       }

@@ -6,7 +6,7 @@ import threading
 import time
 
 from config_options import load_config_options
-from protocol import Actions, STATE_STRUCT, parse_state_pkt, prepare_cmd_pkt
+from protocol import Actions, STATE_STRUCT, parse_state_pkt, prepare_cmd_pkt, print_states
 from tcp import recv_exact
 
 
@@ -22,11 +22,7 @@ def rx_loop(sock: socket.socket, print_hz: float, stop: threading.Event) -> None
             now = time.time()
             if now - last_print >= min_dt:
                 last_print = now
-                print(
-                    f"[PC] STATE seq={state.seq} t_mono={t_mono:.6f} "
-                    f"roll={state.ang.roll:.2f} pitch={state.ang.pitch:.2f} yaw={state.ang.yaw:.2f} "
-                    f"enc1={state.enc.e1} enc2={state.enc.e2} enc3={state.enc.e3} enc4={state.enc.e4}"
-                )
+                print_states(state)
     except ConnectionError:
         print("[PC] RX stopped: server closed")
         stop.set()
@@ -54,8 +50,8 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config_options()
-    host = cfg.udp.local_ip or "127.0.0.1"
-    port = cfg.tcp.port
+    host = "127.0.0.1"
+    port = 30001
 
     print(f"[PC] Connecting to {host}:{port}")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

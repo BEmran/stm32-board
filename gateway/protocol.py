@@ -2,19 +2,19 @@
     Packet formats (little-endian):
 
 STATE (56 bytes):
-  < I d  f f f  f f f  f f f  f f f  i i i i
-    seq, t_mono, ax,ay,az, gx,gy,gz, mx,my,mz r,p,y, enc1,enc2,enc3,enc4
+  < I d  f f f  f f f  f f f  f f f  i i i i f
+    seq, t_mono, ax,ay,az, gx,gy,gz, mx,my,mz r,p,y, enc1,enc2,enc3,enc4, battery
 
 CMD (12 bytes):
-  < I h h h h H H
+  < I H H H H H B
     seq, m1,m2,m3,m4, beep_ms, flags
 
 """
 import struct
 from dataclasses import dataclass, field
 
-STATE_STRUCT = struct.Struct("<Idffffffffffffiiii")   # 72 bytes
-CMD_STRUCT   = struct.Struct("<IHHHHHH")               # 16 bytes
+STATE_STRUCT = struct.Struct("<Ifffffffffffffiiiif")   # 76 bytes
+CMD_STRUCT   = struct.Struct("<IHHHHHB")               # 15 bytes
 
 @dataclass
 class Point3d:
@@ -46,6 +46,7 @@ class State:
     imu: IMU = field(default_factory=IMU)
     ang: Angles = field(default_factory=Angles)
     enc: Encoders = field(default_factory=Encoders)
+    battery: float = 0.0
 
 @dataclass
 class Actions:
@@ -64,7 +65,7 @@ def prepare_state_pkt(state: State, now_mono: float = 0.0) -> bytes:
         float(state.imu.gyro.x), float(state.imu.gyro.y), float(state.imu.gyro.z),
         float(state.imu.mag.x), float(state.imu.mag.y), float(state.imu.mag.z),
         float(state.ang.roll), float(state.ang.pitch), float(state.ang.yaw),
-        int(state.enc.e1), int(state.enc.e2), int(state.enc.e3), int(state.enc.e4),
+        int(state.enc.e1), int(state.enc.e2), int(state.enc.e3), int(state.enc.e4), float(state.bettery),
     )
     return pkt
 
@@ -112,6 +113,7 @@ def parse_state_pkt(pkt: bytes) -> State:
     state.enc.e2 = int(unpacked[15])
     state.enc.e3 = int(unpacked[16])
     state.enc.e4 = int(unpacked[17])
+    state.battery = float(unpacked[18])
     return t_mono, state
 
 def print_states(state: State):
@@ -120,7 +122,7 @@ def print_states(state: State):
           f'gx={state.imu.gyro.x:+7.2f} gy={state.imu.gyro.y:+7.2f} gz={state.imu.gyro.z:+7.2f} '
           f'mx={state.imu.mag.x:+7.2f} my={state.imu.mag.y:+7.2f} mz={state.imu.mag.z:+7.2f} '
           f'roll={state.ang.roll:+7.2f} pitch={state.ang.pitch:+7.2f} yaw={state.ang.yaw:+7.2f} '
-          f'enc1={state.enc.e1:4} enc2={state.enc.e2:4} enc3={state.enc.e3:4} enc4={state.enc.e4:4}')
+          f'enc1={state.enc.e1:4} enc2={state.enc.e2:4} enc3={state.enc.e3:4} enc4={state.enc.e4:4} battery={state.battery:7.2f}')
 
 def print_actions(actions: Actions):
     print(f'seq={actions.seq:8} '
