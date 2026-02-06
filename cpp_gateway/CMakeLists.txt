@@ -32,3 +32,6 @@ target_link_libraries(demo_recorder PRIVATE rosmaster)
 
 add_executable(tcp_client app/tcp_client.cpp)
 target_link_libraries(tcp_client PRIVATE rosmaster)
+
+add_executable(tcp_gateway app/tcp_gateway.cpp)
+target_link_libraries(tcp_gateway PRIVATE rosmaster)

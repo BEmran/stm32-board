@@ -21,6 +21,7 @@ public:
   bool connect_to(const std::string& ip, uint16_t port, bool nonblocking=false);
   bool bind_listen(const std::string& local_addr, uint16_t local_port, int backlog=1);
   bool accept_client(TcpSocket& out, bool nonblocking=false);
+  bool set_nonblocking(bool on=true);
 
   bool send_all(const void* data, size_t len) const;
   bool recv_all(void* data, size_t len) const;

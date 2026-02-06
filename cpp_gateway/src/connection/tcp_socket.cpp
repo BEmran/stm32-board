@@ -9,7 +9,7 @@
 
 namespace connection {
 
-static bool set_nonblocking(int fd, bool on) {
+static bool set_nonblocking_fd(int fd, bool on) {
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags < 0) return false;
   if (on) {
@@ -53,7 +53,7 @@ bool TcpSocket::connect_to(const std::string& ip, uint16_t port, bool nonblockin
   if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) return false;
 
   if (nonblocking) {
-    if (!set_nonblocking(fd_, true)) return false;
+    if (!set_nonblocking_fd(fd_, true)) return false;
   }
 
   if (::connect(fd_, (sockaddr*)&addr, sizeof(addr)) == 0) return true;
@@ -87,7 +87,7 @@ bool TcpSocket::accept_client(TcpSocket& out, bool nonblocking) {
   }
 
   if (nonblocking) {
-    if (!set_nonblocking(cfd, true)) {
+    if (!set_nonblocking_fd(cfd, true)) {
       ::close(cfd);
       return false;
     }
@@ -96,6 +96,11 @@ bool TcpSocket::accept_client(TcpSocket& out, bool nonblocking) {
   out.close();
   out.fd_ = cfd;
   return true;
+}
+
+bool TcpSocket::set_nonblocking(bool on) {
+  if (fd_ < 0) return false;
+  return set_nonblocking_fd(fd_, on);
 }
 
 bool TcpSocket::send_all(const void* data, size_t len) const {
