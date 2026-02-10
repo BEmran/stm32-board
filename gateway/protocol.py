@@ -1,20 +1,20 @@
 """
-    Packet formats (little-endian):
+    Packet formats (big-endian):
 
-STATE (56 bytes):
-  < I d  f f f  f f f  f f f  f f f  i i i i f
+STATE (76 bytes):
+  > I d  f f f  f f f  f f f  f f f  i i i i f
     seq, t_mono, ax,ay,az, gx,gy,gz, mx,my,mz r,p,y, enc1,enc2,enc3,enc4,battery
 
-CMD (12 bytes):
-  < I H H H H H B
+CMD (15 bytes):
+  > I h h h h H B
     seq, m1,m2,m3,m4, beep_ms, flags
 
 """
 import struct
 from dataclasses import dataclass, field
 
-STATE_STRUCT = struct.Struct("<Ifffffffffffffiiiif")   # 76 bytes
-CMD_STRUCT   = struct.Struct("<IHHHHHB")               # 15 bytes
+STATE_STRUCT = struct.Struct(">Ifffffffffffffiiiif")   # 76 bytes
+CMD_STRUCT   = struct.Struct(">IhhhhHB")               # 15 bytes
 
 @dataclass
 class Point3d:

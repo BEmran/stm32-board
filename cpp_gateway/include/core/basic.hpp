@@ -40,10 +40,10 @@ struct State {
 
 // Motor commands structure
 struct MotorCommands {
-    uint16_t m1{0};
-    uint16_t m2{0};
-    uint16_t m3{0};
-    uint16_t m4{0};
+    int16_t m1{0};
+    int16_t m2{0};
+    int16_t m3{0};
+    int16_t m4{0};
 };
 
 // Actions structure (commands sent to robot)

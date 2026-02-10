@@ -164,13 +164,13 @@ int main(int argc, char **argv)
     // ---- receive latest CMD (non-blocking) ----
     for (;;)
     {
-      connection::CmdPktV1 c{};
+      connection::CmdPktV1 c_net{};
       size_t n = 0;
-      if (!cmd_rx.try_recv(&c, sizeof(c), n))
+      if (!cmd_rx.try_recv(&c_net, sizeof(c_net), n))
         break;
-      if (n == sizeof(c))
+      if (n == sizeof(c_net))
       {
-        last_cmd = c;
+        last_cmd = connection::cmd_pktv1_net_to_host(c_net);
         have_cmd = true;
         last_cmd_time = clock::now();
       }
@@ -192,7 +192,8 @@ int main(int argc, char **argv)
     const core::State s = bot.get_state();
     uint32_t seq = ++state_seq;
     double t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
-    connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
+    connection::StatePktV1 pkt_host = connection::state_to_state_pktv1(seq, t_mono_s, s);
+    connection::StatePktV1 pkt = connection::state_pktv1_host_to_net(pkt_host);
     (void)state_tx.send(&pkt, sizeof(pkt));
 
     // ---- fixed-rate schedule ----

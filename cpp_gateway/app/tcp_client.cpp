@@ -145,9 +145,10 @@ int main(int argc, char *argv[])
       cmd.beep_ms = (uint16_t)config.beep_ms;
       cmd.flags = config.flags;
 
-      const connection::MsgHdr h = connection::make_hdr(connection::MSG_CMD, (uint16_t)sizeof(cmd));
+      const connection::CmdPktV1 cmd_net = connection::cmd_pktv1_host_to_net(cmd);
+      const connection::MsgHdr h = connection::make_hdr(connection::MSG_CMD, (uint16_t)sizeof(cmd_net));
 
-      if (!cmd_sock.send_all(&h, sizeof(h)) || !cmd_sock.send_all(&cmd, sizeof(cmd)))
+      if (!cmd_sock.send_all(&h, sizeof(h)) || !cmd_sock.send_all(&cmd_net, sizeof(cmd_net)))
       {
         logger::warn() << "[TCP_CLIENT] CMD send failed -> disconnect.\n";
         break;
@@ -187,8 +188,9 @@ int main(int argc, char *argv[])
         if (type != connection::MSG_STATE) continue;
         if (payload.size() != sizeof(connection::StatePktV1)) continue;
 
-        connection::StatePktV1 pkt{};
-        std::memcpy(&pkt, payload.data(), sizeof(pkt));
+        connection::StatePktV1 pkt_net{};
+        std::memcpy(&pkt_net, payload.data(), sizeof(pkt_net));
+        const connection::StatePktV1 pkt = connection::state_pktv1_net_to_host(pkt_net);
 
         if (min_dt <= 0.0) continue;
         const auto now = clock::now();

@@ -251,8 +251,9 @@ int main(int argc, char **argv)
           {
             if (type == connection::MSG_CMD && payload.size() == sizeof(connection::CmdPktV1))
             {
-              connection::CmdPktV1 c{};
-              std::memcpy(&c, payload.data(), sizeof(c));
+              connection::CmdPktV1 c_net{};
+              std::memcpy(&c_net, payload.data(), sizeof(c_net));
+              connection::CmdPktV1 c = connection::cmd_pktv1_net_to_host(c_net);
               last_cmd = c;
               have_cmd = true;
               last_cmd_time = clock::now();
@@ -300,7 +301,8 @@ int main(int argc, char **argv)
     const core::State s = bot.get_state();
     const uint32_t seq = ++state_seq;
     const float t_mono_s = std::chrono::duration<float>(now - t0).count();
-    const connection::StatePktV1 pkt = connection::state_to_state_pktv1(seq, t_mono_s, s);
+    const connection::StatePktV1 pkt_host = connection::state_to_state_pktv1(seq, t_mono_s, s);
+    const connection::StatePktV1 pkt = connection::state_pktv1_host_to_net(pkt_host);
     const connection::MsgHdr h = connection::make_hdr(connection::MSG_STATE, (uint16_t)sizeof(pkt));
 
     for (size_t i = 0; i < state_clients.size(); )
