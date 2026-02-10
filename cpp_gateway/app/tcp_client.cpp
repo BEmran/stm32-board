@@ -144,7 +144,6 @@ int main(int argc, char *argv[])
 
       cmd.beep_ms = (uint16_t)config.beep_ms;
       cmd.flags = config.flags;
-      cmd.reserved = 0;
 
       const connection::MsgHdr h = connection::make_hdr(connection::MSG_CMD, (uint16_t)sizeof(cmd));
 
