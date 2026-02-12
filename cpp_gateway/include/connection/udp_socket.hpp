@@ -19,12 +19,12 @@ namespace connection
     UdpSocket(UdpSocket &&) noexcept;
     UdpSocket &operator=(UdpSocket &&) noexcept;
 
-    [[nodiscard]] bool bind_rx(std::string_view local_addr, uint16_t local_port, bool nonblocking = true);
-    [[nodiscard]] bool set_tx_destination(std::string_view ip, uint16_t port);
+     bool bind_rx(std::string_view local_addr, uint16_t local_port, bool nonblocking = true);
+     bool set_tx_destination(std::string_view ip, uint16_t port);
 
-    [[nodiscard]] bool send(const void *data, size_t len) const;
-    [[nodiscard]] bool try_recv(void *data, size_t len, size_t &out_nbytes) const;
-    [[nodiscard]] bool is_open() const noexcept { return fd_ >= 0; }
+     bool send(const void *data, size_t len) const;
+     bool try_recv(void *data, size_t len, size_t &out_nbytes) const;
+     bool is_open() const noexcept { return fd_ >= 0; }
 
   private:
     int fd_ = -1;

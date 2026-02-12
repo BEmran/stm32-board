@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(rosmaster
-  src/core/basic.cpp
   src/rosmaster/rosmaster.cpp
   src/connection/serial_port.cpp
   src/connection/tcp_socket.cpp

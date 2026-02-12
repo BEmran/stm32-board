@@ -49,7 +49,7 @@ namespace connection
     }
 
     // Try to pop one complete frame. Returns true if a frame was produced.
-    [[nodiscard]] bool pop(uint8_t &out_type, std::vector<uint8_t> &out_payload)
+     bool pop(uint8_t &out_type, std::vector<uint8_t> &out_payload)
     {
       if (buf_.size() < sizeof(MsgHdr))
         return false;

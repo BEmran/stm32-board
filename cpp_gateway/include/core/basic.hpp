@@ -75,12 +75,12 @@ namespace core
     float version{0.0f};
   };
 
-  [[nodiscard]] constexpr Vec3d scale_vec3d(const Vec3d &in, float scale) noexcept
+   constexpr Vec3d scale_vec3d(const Vec3d &in, float scale) noexcept
   {
     return {in.x * scale, in.y * scale, in.z * scale};
   }
 
-  [[nodiscard]] constexpr Vec3d rearrange_gyro(const Vec3d &in) noexcept
+   constexpr Vec3d rearrange_gyro(const Vec3d &in) noexcept
   {
     return {in.x, -in.y, -in.z};
   }

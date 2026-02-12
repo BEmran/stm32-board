@@ -85,19 +85,19 @@ namespace utils
          * @brief Open the CSV file and write header
          * @return true if successful, false otherwise
          */
-        [[nodiscard]] bool open();
+         bool open();
 
         /**
          * @brief Check if recorder is open and ready
          */
-        [[nodiscard]] bool is_open() const noexcept { return file_.is_open(); }
+         bool is_open() const noexcept { return file_.is_open(); }
 
         /**
          * @brief Record a row of data
          * @param row Key-value pairs matching header columns
          * @return true if successful, false otherwise
          */
-        [[nodiscard]] bool record(const CSVRow &row);
+         bool record(const CSVRow &row);
         /**
          * @brief Flush data to disk
          */
@@ -111,7 +111,7 @@ namespace utils
         /**
          * @brief Get the path to the CSV file
          */
-        [[nodiscard]] const std::filesystem::path &path() const noexcept
+         const std::filesystem::path &path() const noexcept
         {
             return csv_path_;
         }
@@ -126,13 +126,13 @@ namespace utils
          * @brief Format a numeric value with precision
          */
         template <Numeric T>
-        [[nodiscard]] static std::string format_value(T value, int precision = 6);
+         static std::string format_value(T value, int precision = 6);
 
     private:
         /**
          * @brief Build file path with timestamp
          */
-        [[nodiscard]] std::filesystem::path build_path(
+         std::filesystem::path build_path(
             const std::filesystem::path &recorder_dir,
             std::string_view prefix) const;
 
@@ -171,7 +171,7 @@ namespace utils
         /**
          * @brief Convert States to CSV row
          */
-        [[nodiscard]] CSVRow state_to_row(
+         CSVRow state_to_row(
             const core::Timestamps &ts,
             const core::States &state) const;
     };
@@ -197,7 +197,7 @@ namespace utils
         /**
          * @brief Convert Actions to CSV row
          */
-        [[nodiscard]] CSVRow actions_to_row(
+         CSVRow actions_to_row(
             const core::Timestamps &ts,
             const core::Actions &actions) const;
     };

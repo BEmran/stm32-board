@@ -15,7 +15,7 @@ constexpr float MAG_RATIO  {1.0f};
 constexpr float Milli_RATIO  {1.0f / 1000.0f};
 
 namespace {
-  [[nodiscard]] core::Vec3d parse_vec3d(const uint8_t* d) noexcept {
+   core::Vec3d parse_vec3d(const uint8_t* d) noexcept {
     core::Vec3d vec;
     vec.x = utils::le_i16(d+0);
     vec.y = utils::le_i16(d+2);

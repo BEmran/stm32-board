@@ -44,12 +44,12 @@ namespace helpper
 
     std::string to_string(const core::States &states)
     {
-        return std::format("acc= {s}, gyro= {s}, mag= {s}, angle= {s}, enc= {s}, batt= {:+.2f}", to_string(states.imu.acc), to_string(states.imu.gyro), to_string(states.imu.mag), to_string(states.ang), to_string(states.enc), states.battery_voltage);
+        return std::format("acc= {:s}, gyro= {:s}, mag= {:s}, angle= {:s}, enc= {:s}, batt= {:+.2f}", to_string(states.imu.acc), to_string(states.imu.gyro), to_string(states.imu.mag), to_string(states.ang), to_string(states.enc), states.battery_voltage);
     }
 
     std::string to_string(const core::Actions &actions)
     {
-        return std::format("motors= {s}, beep_ms= {}, flags= {:#010b}",
+        return std::format("motors= {:s}, beep_ms= {}, flags= {:#010b}",
                            to_string(actions.motors),
                            static_cast<unsigned>(actions.beep_ms),
                            static_cast<unsigned>(actions.flags));
@@ -57,12 +57,12 @@ namespace helpper
 
     std::string to_string(const connection::StatesPkt &pkt)
     {
-        return std::format("seq= {}, t_mono_s= {}, {s}", pkt.seq, pkt.t_mono_s, to_string(pkt.state));
+        return std::format("seq= {}, t_mono_s= {}, {:s}", pkt.seq, pkt.t_mono_s, to_string(pkt.state));
     }
 
     std::string to_string(const connection::CmdPkt &pkt)
     {
-        return std::format("seq= {}, {s}", pkt.seq, to_string(pkt.actions));
+        return std::format("seq= {}, {:s}", pkt.seq, to_string(pkt.actions));
     }
 
 }

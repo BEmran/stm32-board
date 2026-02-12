@@ -10,7 +10,7 @@ namespace helpper
     {
     public:
         explicit Print(double duration);
-        [[nodiscard]] bool check();
+         bool check();
     private:
         double last_{0.0};
         double duration_{1.0};

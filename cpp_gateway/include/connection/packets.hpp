@@ -32,5 +32,5 @@ namespace connection
 
   static_assert(sizeof(CmdPkt) == 14, "CmdPkt must be 14 bytes");
 
-  [[nodiscard]] StatesPkt state_to_state_pkt(uint32_t seq, float t_mono_s, core::States state);
+   StatesPkt state_to_state_pkt(uint32_t seq, float t_mono_s, core::States state);
 } // namespace connection
