@@ -41,7 +41,7 @@ class IMU:
     mag: Point3d = field(default_factory=Point3d)
 
 @dataclass
-class State:
+class States:
     seq: int = 0
     imu: IMU = field(default_factory=IMU)
     ang: Angles = field(default_factory=Angles)
@@ -56,7 +56,7 @@ class Actions:
     flags: int = 0
 
 
-def prepare_state_pkt(state: State, now_mono: float = 0.0) -> bytes:
+def prepare_state_pkt(state: States, now_mono: float = 0.0) -> bytes:
     """Prepare STATE_STRUCT binary packet from dataclasss."""
     pkt = STATE_STRUCT.pack(
         int(state.seq),
@@ -91,10 +91,10 @@ def parse_cmd_pkt(pkt: bytes) -> Actions:
     actions.flags = unpacked[6]
     return actions
 
-def parse_state_pkt(pkt: bytes) -> State:
-    """Parse STATE_STRUCT binary state into State dataclass."""
+def parse_state_pkt(pkt: bytes) -> States:
+    """Parse STATE_STRUCT binary state into States dataclass."""
     unpacked = STATE_STRUCT.unpack(pkt)
-    state = State()
+    state = States()
     state.seq = int(unpacked[0])
     t_mono = float(unpacked[1])
     state.imu.acc.x = float(unpacked[2])
@@ -117,7 +117,7 @@ def parse_state_pkt(pkt: bytes) -> State:
     state.battery = float(unpacked[18])
     return t_mono, state
 
-def print_states(state: State):
+def print_states(state: States):
     print(f'seq={state.seq:8} '
           f'ax={state.imu.acc.x:+7.2f} ay={state.imu.acc.y:+7.2f} az={state.imu.acc.z:+7.2f} '
           f'gx={state.imu.gyro.x:+7.2f} gy={state.imu.gyro.y:+7.2f} gz={state.imu.gyro.z:+7.2f} '

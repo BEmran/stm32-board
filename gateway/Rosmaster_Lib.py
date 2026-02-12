@@ -531,7 +531,7 @@ class Rosmaster(object):
     # speed=[-100, 100]，=0停止。
     # adjust=True开启陀螺仪辅助运动方向。=False则不开启。(此功能未开通)
     # Control the car forward, backward, left, right and other movements.
-    # State =[0~6],=0 stop,=1 forward,=2 backward,=3 left,=4 right,=5 spin left,=6 spin right
+    # States =[0~6],=0 stop,=1 forward,=2 backward,=3 left,=4 right,=5 spin left,=6 spin right
     # Speed =[-100, 100], =0 Stop.
     # Adjust =True Activate the gyroscope auxiliary motion direction.  If =False, the function is disabled.(This function is not enabled)
     def set_car_run(self, state, speed, adjust=False):
@@ -867,7 +867,7 @@ class Rosmaster(object):
                         if self.__arm_offset_id == 0:
                             print("Arm Reset Offset Value")
                         else:
-                            print("Arm Offset State:", self.__arm_offset_id, self.__arm_offset_state, i)
+                            print("Arm Offset States:", self.__arm_offset_id, self.__arm_offset_state, i)
                     return self.__arm_offset_state
                 time.sleep(.001)
             return self.__arm_offset_state

@@ -3,22 +3,16 @@
 #include "utils/csv_recorder.hpp"
 #include "utils/logger.hpp"
 #include "utils/timestamp.h"
+#include "helpper.hpp"
+
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <string_view>
 
-using namespace std::chrono_literals;
 constexpr double PRINT_DURATION = 1.0;
+using namespace std::chrono_literals;
 constexpr std::string_view RECORDER_PATH{"./recorder"};
-bool should_print(double duration) {
-  static double last = utils::monotonic_now();
-  double now = utils::monotonic_now();
-  if (now - last > duration) {
-    last = now;
-    return true;
-  }
-  return false;
-}
 
 int main() {
   rosmaster::Rosmaster bot;
@@ -37,23 +31,24 @@ int main() {
   logger::debug() << "Version: " << bot.get_version() << "\n";
 
   // Create recorder
-  utils::CSVRecorder actions_recorder(RECORDER_PATH, "actions", headers::ACTIONS);
-  utils::CSVRecorder state_recorder(RECORDER_PATH, "state", headers::STATE);
+  utils::CSVActionsRecorder actions_recorder(RECORDER_PATH);
+  utils::CSVStatesRecorder state_recorder(RECORDER_PATH);
   
   // Open the recorder
   if (!actions_recorder.open() or !state_recorder.open()) {
       logger::error() << "Failed to open recorder\n";
       return EXIT_FAILURE;
   }
-
+  helpper::Print print_info(PRINT_DURATION);
+  
   // Simulate recording actions
   while (true) {
-      core::State state = bot.get_state();
-      core::Actions actions;
-      auto ts = utils::now();
+      const auto state = bot.get_state();
+      core::Actions actions{};
+      const auto ts = utils::now();
       actions_recorder.record_actions(ts, actions);
       state_recorder.record_state(ts, state);
-      if (should_print(PRINT_DURATION)) {
+      if (print_info.check()) {
         logger::info() << "states and actions are logged, up time = " << utils::monotonic_now();
       }
       std::this_thread::sleep_for(100ms);

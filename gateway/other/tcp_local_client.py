@@ -32,7 +32,7 @@ def rx_loop(sock: socket.socket, print_hz: float, stop: threading.Event) -> None
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local TCP client to keep server streaming")
-    parser.add_argument("--print-hz", type=float, default=0.0, help="State print rate (Hz, 0=off)")
+    parser.add_argument("--print-hz", type=float, default=0.0, help="States print rate (Hz, 0=off)")
     args = parser.parse_args()
 
     cfg = load_config_options()

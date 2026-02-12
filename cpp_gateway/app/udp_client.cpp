@@ -1,6 +1,7 @@
 #include "connection/packets.hpp"
 #include "connection/udp_socket.hpp"
 #include "utils/logger.hpp"
+#include "helpper.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <thread>
 
 constexpr const char *DEFAULT_BIND_IP{"0.0.0.0"};
@@ -17,6 +19,8 @@ constexpr uint16_t DEFAULT_STATE_PORT{20001};
 static std::atomic<bool> g_run{true};
 
 static void on_sigint(int) { g_run.store(false); }
+
+using namespace std::chrono_literals;
 
 struct Config {
   std::string bind_ip{DEFAULT_BIND_IP};
@@ -28,20 +32,20 @@ bool parse_config(int argc, char **argv, Config &config) {
   // Simple CLI:
   //  --bind_ip 0.0.0.0 --state_port 20001 --print_hz 1
   for (int i = 1; i < argc; i++) {
-    std::string a = argv[i];
-    auto need = [&](const char *name) -> std::string {
+    std::string_view a = argv[i];
+    auto need = [&](std::string_view name) -> std::string_view {
       if (i + 1 >= argc) {
         logger::error() << "Missing value for " << name << "\n";
         std::exit(2);
       }
-      return std::string(argv[++i]);
+      return argv[++i];
     };
     if (a == "--bind_ip") {
-      config.bind_ip = need("--bind_ip");
+      config.bind_ip = std::string(need("--bind_ip"));
     } else if (a == "--state_port") {
-      config.state_port = (uint16_t)std::stoi(need("--state_port"));
+      config.state_port = static_cast<uint16_t>(std::stoi(std::string(need("--state_port"))));
     } else if (a == "--print_hz") {
-      config.print_hz = std::stod(need("--print_hz"));
+      config.print_hz = std::stod(std::string(need("--print_hz")));
     } else if (a == "--help") {
       logger::info() << "Usage: " << argv[0] << " [options]\n"
                                         "  --bind_ip 0.0.0.0       Local bind IP\n"
@@ -56,6 +60,7 @@ bool parse_config(int argc, char **argv, Config &config) {
   return EXIT_SUCCESS;
 }
 
+helpper::Print print(1.0);
 int main(int argc, char **argv) {
   Config config;
   if (parse_config(argc, argv, config) == EXIT_FAILURE) {
@@ -79,31 +84,18 @@ int main(int argc, char **argv) {
   auto last_print = clock::now() - std::chrono::duration<double>(min_dt);
 
   while (g_run.load()) {
-    connection::StatePktV1 pkt{};
+    connection::StatesPkt pkt{};
     size_t n = 0;
     if (!rx.try_recv(&pkt, sizeof(pkt), n)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(1ms);
       continue;
     }
     if (n != sizeof(pkt)) continue;
     if (min_dt <= 0.0) continue;
 
-    const auto now = clock::now();
-    if (std::chrono::duration<double>(now - last_print).count() < min_dt) {
-      continue;
+    if (print.check()) {
+      logger::info() << "[UDP] STATE " << helpper::to_string(pkt) << "\n";
     }
-    last_print = now;
-
-    logger::info() << "[UDP] STATE seq=" << pkt.seq
-                   << " t_mono=" << pkt.t_mono_s
-                   << " roll=" << pkt.roll
-                   << " pitch=" << pkt.pitch
-                   << " yaw=" << pkt.yaw
-                   << " enc1=" << pkt.e1
-                   << " enc2=" << pkt.e2
-                   << " enc3=" << pkt.e3
-                   << " enc4=" << pkt.e4
-                   << " batt=" << pkt.battery_voltage << "\n";
   }
 
   logger::info() << "[UDP] Exiting.\n";

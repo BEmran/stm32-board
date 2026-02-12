@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include <string>
+#include <utility>
 
 namespace connection {
 
@@ -23,35 +25,34 @@ TcpSocket::TcpSocket() {
   fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
 }
 
-TcpSocket::~TcpSocket() {
+TcpSocket::~TcpSocket() noexcept {
   close();
 }
 
 TcpSocket::TcpSocket(TcpSocket&& other) noexcept {
-  fd_ = other.fd_;
-  other.fd_ = -1;
+  fd_ = std::exchange(other.fd_, -1);
 }
 
 TcpSocket& TcpSocket::operator=(TcpSocket&& other) noexcept {
   if (this == &other) return *this;
   close();
-  fd_ = other.fd_;
-  other.fd_ = -1;
+  fd_ = std::exchange(other.fd_, -1);
   return *this;
 }
 
-void TcpSocket::close() {
+void TcpSocket::close() noexcept {
   if (fd_ >= 0) ::close(fd_);
   fd_ = -1;
 }
 
-bool TcpSocket::connect_to(const std::string& ip, uint16_t port, bool nonblocking) {
+bool TcpSocket::connect_to(std::string_view ip, uint16_t port, bool nonblocking) {
   if (fd_ < 0) return false;
 
   ::sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
-  if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) return false;
+  const std::string ip_str(ip);
+  if (inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr) != 1) return false;
 
   if (nonblocking) {
     if (!set_nonblocking_fd(fd_, true)) return false;
@@ -63,7 +64,7 @@ bool TcpSocket::connect_to(const std::string& ip, uint16_t port, bool nonblockin
   return false;
 }
 
-bool TcpSocket::bind_listen(const std::string& local_addr, uint16_t local_port, int backlog) {
+bool TcpSocket::bind_listen(std::string_view local_addr, uint16_t local_port, int backlog) {
   if (fd_ < 0) return false;
 
   int reuse = 1;
@@ -72,7 +73,8 @@ bool TcpSocket::bind_listen(const std::string& local_addr, uint16_t local_port, 
   ::sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(local_port);
-  if (inet_pton(AF_INET, local_addr.c_str(), &addr.sin_addr) != 1) return false;
+  const std::string ip_str(local_addr);
+  if (inet_pton(AF_INET, ip_str.c_str(), &addr.sin_addr) != 1) return false;
 
   if (::bind(fd_, (sockaddr*)&addr, sizeof(addr)) != 0) return false;
   return ::listen(fd_, backlog) == 0;
@@ -109,7 +111,13 @@ bool TcpSocket::send_all(const void* data, size_t len) const {
   const uint8_t* p = static_cast<const uint8_t*>(data);
   size_t sent = 0;
   while (sent < len) {
-    const ssize_t n = ::send(fd_, p + sent, len - sent, MSG_NOSIGNAL);
+    const int flags =
+#ifdef MSG_NOSIGNAL
+      MSG_NOSIGNAL;
+#else
+      0;
+#endif
+    const ssize_t n = ::send(fd_, p + sent, len - sent, flags);
     if (n > 0) {
       sent += static_cast<size_t>(n);
       continue;

@@ -37,9 +37,9 @@ def _state_publisher_loop(
     recorder_dir: str,
     recorder_prefix: str,
 ) -> None:
-    log.info("State publisher listening")
+    log.info("States publisher listening")
     conn, addr = server.accept()
-    log.info(f"State client connected: {addr}")
+    log.info(f"States client connected: {addr}")
 
     set_low_latency(conn)
     set_buffers(conn)
@@ -128,7 +128,7 @@ def main() -> None:
     cmd_server = TcpServer(local_ip, cfg.tcp.cmd_port, backlog=1)
     state_server.open()
     cmd_server.open()
-    log.info(f"State TX on {local_ip}:{cfg.tcp.state_port} (local only)")
+    log.info(f"States TX on {local_ip}:{cfg.tcp.state_port} (local only)")
     log.info(f"CMD RX on {local_ip}:{cfg.tcp.cmd_port} (local only)")
 
     try:

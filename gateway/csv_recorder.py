@@ -5,10 +5,10 @@ from datetime import datetime
 from typing import Dict, Iterable
 
 import logger as log
-from protocol import Actions, State
+from protocol import Actions, States
 
 ActionsHeader = ["t_epoch_s", "t_mono_s", "m1", "m2", "m3", "m4", "beep_ms", "flags"]
-StateHeader = [
+StatesHeader = [
     "t_epoch_s",
     "t_mono_s",
     "ax",
@@ -42,7 +42,7 @@ def actions_to_dict(t_wall_s: float, t_mono_s: float, actions: Actions) -> Dict[
     }
     return row
 
-def state_to_dict(t_wall_s: float, t_mono_s: float, state: State) -> Dict[str, object]:
+def state_to_dict(t_wall_s: float, t_mono_s: float, state: States) -> Dict[str, object]:
     row = {
         "t_epoch_s": f"{t_wall_s:.6f}",
         "t_mono_s": f"{t_mono_s:.6f}",

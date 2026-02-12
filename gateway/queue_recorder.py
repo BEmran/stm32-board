@@ -4,8 +4,8 @@ import threading
 import time
 
 import logger as log
-from csv_recorder import CSVRecorder, ActionsHeader, StateHeader, actions_to_dict, state_to_dict
-from protocol import Actions, State
+from csv_recorder import CSVRecorder, ActionsHeader, StatesHeader, actions_to_dict, state_to_dict
+from protocol import Actions, States
 
 
 class MyQueue(queue.Queue):
@@ -39,7 +39,7 @@ class QueueRecorder(threading.Thread):
 
     def run(self):
         try:
-            with CSVRecorder(recorderdir=self.recorderdir, prefix=self._prefixed("state"), header=StateHeader) as state_recorder, \
+            with CSVRecorder(recorderdir=self.recorderdir, prefix=self._prefixed("state"), header=StatesHeader) as state_recorder, \
                  CSVRecorder(recorderdir=self.recorderdir, prefix=self._prefixed("cmd"), header=ActionsHeader) as cmd_recorder:
                 while not self._stop_event.is_set():
                     drained = False
@@ -59,7 +59,7 @@ class QueueRecorder(threading.Thread):
 
         if isinstance(data, Actions):
             recorder.record(actions_to_dict(t_wall, t_mono, data))
-        elif isinstance(data, State):
+        elif isinstance(data, States):
             recorder.record(state_to_dict(t_wall, t_mono, data))
         return True
 

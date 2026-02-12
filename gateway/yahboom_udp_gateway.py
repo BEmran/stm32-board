@@ -9,7 +9,7 @@ import signal
 import logger as log
 from config_options import load_config_options
 from my_Rosmaster import Rosmaster, apply_actions, initialize_rosmaster, read_state
-from protocol import Actions, CMD_STRUCT, State, parse_cmd_pkt, prepare_state_pkt, print_actions, print_states
+from protocol import Actions, CMD_STRUCT, States, parse_cmd_pkt, prepare_state_pkt, print_actions, print_states
 from queue_recorder import QueueRecorder, MyQueue
 from udp import UDPSockets, UDPRxSockets, UDPTxSockets
 
@@ -73,7 +73,7 @@ def build_udp_server_config(cfg) -> UdpServerConfig:
 
 
 class Server:
-    def __init__(self, handle_state: Callable[[], tuple[bytes, State]],
+    def __init__(self, handle_state: Callable[[], tuple[bytes, States]],
     handle_cmd: Callable[[bytes], Actions],
     handle_timeout_if_needed: Callable[[], None],
     server_cfg: UdpServerConfig,
@@ -223,14 +223,14 @@ class Server:
     def __exit__(self) -> None:
         self.close()
 
-class HandleState:
+class HandleStates:
     def __init__(self, bot: Rosmaster,  print_interval_s: float):
         self.last_printed = 0.0
         self.seq = 0
         self.print_interval_s = print_interval_s
         self.bot = bot
     
-    def handle(self) -> tuple[bytes, State]:
+    def handle(self) -> tuple[bytes, States]:
         self.seq += 1
         state = read_state(self.bot)
         state.seq = self.seq
@@ -272,7 +272,7 @@ def main() -> None:
     server_cfg = build_udp_server_config(cfg)
 
     bot = initialize_rosmaster(cfg.rosmaster.linux_port, debug=False)
-    handle_state = HandleState(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
+    handle_state = HandleStates(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S)
     handle_actions = HandleActions(bot, print_interval_s=DEFAULT_PRINT_INTERVAL_S, cmd_timeout_s=cfg.timing.cmd_timeout_s)
     
     log.info("UDP server starting")

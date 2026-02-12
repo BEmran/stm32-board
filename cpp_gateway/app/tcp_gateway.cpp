@@ -1,8 +1,11 @@
 #include "connection/tcp_socket.hpp"
 #include "connection/packets.hpp"
 #include "connection/framed.hpp"
+#include "helpper.hpp"
 #include "rosmaster/rosmaster.hpp"
 #include "utils/logger.hpp"
+#include "utils/csv_recorder.hpp"
+#include "utils/timestamp.h"
 
 #include <atomic>
 #include <chrono>
@@ -11,11 +14,14 @@
 #include <cstring>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 constexpr int SERIAL_BAUD{115200};
-
+constexpr double PRINT_DURATION = 1.0;
+using namespace std::chrono_literals;
+constexpr std::string_view RECORDER_PATH{"./recorder"};
 constexpr uint16_t DEFAULT_STATE_PORT{30001};
 constexpr uint16_t DEFAULT_CMD_PORT{30002};
 
@@ -26,6 +32,8 @@ constexpr const char *BIND_IP{"0.0.0.0"};
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int) { g_run.store(false); }
+
+using namespace std::chrono_literals;
 
 struct Config {
   std::string serial_dev{SERIAL_DEV};
@@ -42,8 +50,7 @@ struct Config {
   double motor_log_hz{10.0};
 };
 
-static bool parse_config(int argc, char **argv, Config &config)
-{
+static bool parse_config(int argc, char **argv, Config &config) {
   // Split TCP ports:
   //   STATE: server -> clients (broadcast)
   //   CMD  : client -> server (single active controller)
@@ -55,32 +62,28 @@ static bool parse_config(int argc, char **argv, Config &config)
   //
   // Back-compat:
   //   --port is treated as --state_port
-  for (int i = 1; i < argc; i++)
-  {
-    std::string a = argv[i];
-    auto need = [&](const char *name) -> std::string
-    {
-      if (i + 1 >= argc)
-      {
+  for (int i = 1; i < argc; i++) {
+    std::string_view a = argv[i];
+    auto need = [&](std::string_view name) -> std::string_view {
+      if (i + 1 >= argc) {
         logger::error() << "Missing value for " << name << "\n";
         std::exit(2);
       }
-      return std::string(argv[++i]);
+      return argv[++i];
     };
 
-    if (a == "--serial") config.serial_dev = need("--serial");
-    else if (a == "--baud") config.serial_baud = std::stoi(need("--baud"));
-    else if (a == "--bind_ip") config.bind_ip = need("--bind_ip");
+    if (a == "--serial") config.serial_dev = std::string(need("--serial"));
+    else if (a == "--baud") config.serial_baud = std::stoi(std::string(need("--baud")));
+    else if (a == "--bind_ip") config.bind_ip = std::string(need("--bind_ip"));
 
-    else if (a == "--state_port") config.state_port = (uint16_t)std::stoi(need("--state_port"));
-    else if (a == "--cmd_port") config.cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
-    else if (a == "--port") config.state_port = (uint16_t)std::stoi(need("--port")); // back-compat
-    else if (a == "--hz") config.hz = std::stod(need("--hz"));
-    else if (a == "--cmd_timeout") config.cmd_timeout_s = std::stod(need("--cmd_timeout"));
-    else if (a == "--motor_log_hz") config.motor_log_hz = std::stod(need("--motor_log_hz"));
+    else if (a == "--state_port") config.state_port = static_cast<uint16_t>(std::stoi(std::string(need("--state_port"))));
+    else if (a == "--cmd_port") config.cmd_port = static_cast<uint16_t>(std::stoi(std::string(need("--cmd_port"))));
+    else if (a == "--port") config.state_port = static_cast<uint16_t>(std::stoi(std::string(need("--port")))); // back-compat
+    else if (a == "--hz") config.hz = std::stod(std::string(need("--hz")));
+    else if (a == "--cmd_timeout") config.cmd_timeout_s = std::stod(std::string(need("--cmd_timeout")));
+    else if (a == "--motor_log_hz") config.motor_log_hz = std::stod(std::string(need("--motor_log_hz")));
 
-    else if (a == "--help")
-    {
+    else if (a == "--help") {
       logger::info()
           << "Usage: " << argv[0] << " [options]\n"
           << "  --serial /dev/ttyUSB0      Serial device\n"
@@ -94,37 +97,22 @@ static bool parse_config(int argc, char **argv, Config &config)
           << "\nBack-compat:\n"
           << "  --port N                   Treated as --state_port N\n";
       return false;
-    }
-    else
-    {
+    } else {
       logger::error() << "Unknown arg: " << a << "\n";
       return false;
     }
   }
 
-  if (config.hz <= 0.0) config.hz = STATE_PUBLISH_FREQ;
+  if (config.hz <= 0.0) config.hz = static_cast<double>(STATE_PUBLISH_FREQ);
   if (config.cmd_timeout_s <= 0.0) config.cmd_timeout_s = CMD_TIMEOUT;
-  if (config.state_port == 0 || config.cmd_port == 0)
-  {
+  if (config.state_port == 0 || config.cmd_port == 0) {
     logger::error() << "Invalid port(s).\n";
     return false;
   }
   return true;
 }
 
-static bool should_print(std::chrono::steady_clock::time_point &last,
-                         double hz,
-                         std::chrono::steady_clock::time_point now)
-{
-  if (hz <= 0.0) return false;
-  const double dt = 1.0 / hz;
-  if (std::chrono::duration<double>(now - last).count() < dt) return false;
-  last = now;
-  return true;
-}
-
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   Config config;
   if (!parse_config(argc, argv, config))
     return 0;
@@ -135,6 +123,12 @@ int main(int argc, char **argv)
   std::signal(SIGPIPE, SIG_IGN);
 #endif
 
+  utils::CSVActionsRecorder actions_recorder(RECORDER_PATH);
+  utils::CSVStatesRecorder states_recorder(RECORDER_PATH);
+  if (!actions_recorder.open() || !states_recorder.open()) {
+    logger::error() << "[TCP_GW] Failed to open CSV recorders\n";
+    return 1;
+  }
   // ---- Rosmaster ----
   rosmaster::Rosmaster bot;
   rosmaster::Config cfg;
@@ -142,8 +136,7 @@ int main(int argc, char **argv)
   cfg.baud = config.serial_baud;
   cfg.debug = false;
 
-  if (!bot.connect(cfg))
-  {
+  if (!bot.connect(cfg)) {
     logger::error() << "[TCP_GW] Failed to connect to " << cfg.device << "\n";
     return 1;
   }
@@ -152,8 +145,7 @@ int main(int argc, char **argv)
 
   // ---- STATE server (multi clients) ----
   connection::TcpSocket srv_state;
-  if (!srv_state.bind_listen(config.bind_ip, config.state_port, /*backlog=*/8))
-  {
+  if (!srv_state.bind_listen(config.bind_ip, config.state_port, /*backlog=*/8)) {
     logger::error() << "[TCP_GW] Failed to bind STATE on " << config.bind_ip
                     << ":" << config.state_port << "\n";
     return 1;
@@ -162,8 +154,7 @@ int main(int argc, char **argv)
 
   // ---- CMD server (single active control client) ----
   connection::TcpSocket srv_cmd;
-  if (!srv_cmd.bind_listen(config.bind_ip, config.cmd_port, /*backlog=*/2))
-  {
+  if (!srv_cmd.bind_listen(config.bind_ip, config.cmd_port, /*backlog=*/2)) {
     logger::error() << "[TCP_GW] Failed to bind CMD on " << config.bind_ip
                     << ":" << config.cmd_port << "\n";
     return 1;
@@ -187,20 +178,18 @@ int main(int argc, char **argv)
   const auto t0 = clock::now();
   auto next = clock::now();
 
-  connection::CmdPktV1 last_cmd{};
+  connection::CmdPkt last_cmd{};
   bool have_cmd = false;
   bool last_cmd_valid = false;
   auto last_cmd_time = clock::now();
 
   uint32_t state_seq = 0;
 
-  auto last_motor_log = clock::now() - std::chrono::seconds(10);
-
-  while (g_run.load())
-  {
+  auto last_motor_log = clock::now() - 10s;
+  helpper::Print print(1.0);
+  while (g_run.load()) {
     // ---- accept STATE clients (non-blocking, drain accept queue) ----
-    while (true)
-    {
+    while (true) {
       connection::TcpSocket c;
       if (!srv_state.accept_client(c, /*nonblocking=*/true))
         break;
@@ -210,14 +199,12 @@ int main(int argc, char **argv)
     }
 
     // ---- accept CMD client (non-blocking, keep only newest) ----
-    while (true)
-    {
+    while (true) {
       connection::TcpSocket c;
       if (!srv_cmd.accept_client(c, /*nonblocking=*/true))
         break;
 
-      if (cmd_client.is_open())
-      {
+      if (cmd_client.is_open()) {
         cmd_client.close();
         logger::warn() << "[TCP_GW] CMD client replaced (new controller connected).\n";
       }
@@ -230,34 +217,24 @@ int main(int argc, char **argv)
     }
 
     // ---- receive framed CMD messages (non-blocking) ----
-    if (cmd_client.is_open())
-    {
+    if (cmd_client.is_open()) {
       uint8_t tmp[1024];
       size_t n = 0;
-      if (cmd_client.try_recv(tmp, sizeof(tmp), n))
-      {
-        if (n == 0)
-        {
+      if (cmd_client.try_recv(tmp, sizeof(tmp), n)) {
+        if (n == 0) {
           cmd_client.close();
-          logger::warn() << "[TCP_GW] CMD client disconnected.";
-        }
-        else
-        {
+          logger::warn() << "[TCP_GW] CMD client disconnected.\n";
+        } else {
           cmd_frx.push_bytes(tmp, n);
 
           uint8_t type = 0;
           std::vector<uint8_t> payload;
-          while (cmd_frx.pop(type, payload))
-          {
-            if (type == connection::MSG_CMD && payload.size() == sizeof(connection::CmdPktV1))
-            {
-              connection::CmdPktV1 c_net{};
-              std::memcpy(&c_net, payload.data(), sizeof(c_net));
-              connection::CmdPktV1 c = connection::cmd_pktv1_net_to_host(c_net);
-              last_cmd = c;
+          while (cmd_frx.pop(type, payload)) {
+            if (type == connection::MSG_CMD && payload.size() == sizeof(connection::CmdPkt)) {
+              std::memcpy(&last_cmd, payload.data(), sizeof(last_cmd));
               have_cmd = true;
               last_cmd_time = clock::now();
-              logger::debug() << "[TCP_GW] got CMD seq=" << c.seq;
+              logger::debug() << "[TCP_GW] got CMD seq=" << last_cmd.seq;
             }
             // ignore other frames
           }
@@ -270,40 +247,35 @@ int main(int argc, char **argv)
     const double cmd_age = std::chrono::duration<double>(now - last_cmd_time).count();
     const bool cmd_valid = have_cmd && (cmd_age <= config.cmd_timeout_s);
 
-    if (cmd_valid)
-    {
-      core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
-      bot.apply_actions(actions);
+    const bool do_print = print.check();
+
+    if (cmd_valid) {
+      bot.apply_actions(last_cmd.actions);
 
       if (!last_cmd_valid)
         logger::info() << "[TCP_GW] CMD valid.\n";
       last_cmd_valid = true;
 
-      // if (should_print(last_motor_log, config.motor_log_hz, now))
-      // {
+      if (do_print) {
         logger::info()
-            << "[TCP_GW] CMD seq=" << last_cmd.seq
-            << " motors=(" << actions.motors.m1 << "," << actions.motors.m2
-            << "," << actions.motors.m3 << "," << actions.motors.m4 << ")"
-            << " beep=" << actions.beep_ms
-            << " flags=" << actions.flags << "\n";
-      // }
-    }
-    else
-    {
-      if (last_cmd_valid)
+            << "[TCP_GW] CMD " << helpper::to_string(last_cmd) << "\n";
+        actions_recorder.record_actions(utils::now(), last_cmd.actions);
+      }
+    } else {
+      if (last_cmd_valid) {
         logger::warn() << "[TCP_GW] CMD timeout -> motors stop.\n";
-      bot.set_motor(0, 0, 0, 0);
-      last_cmd_valid = false;
+        bot.set_motor(0, 0, 0, 0);
+        last_cmd_valid = false;
+      }
     }
 
     // ---- publish framed STATE (broadcast) ----
-    const core::State s = bot.get_state();
+    const core::States s = bot.get_state();
     const uint32_t seq = ++state_seq;
     const float t_mono_s = std::chrono::duration<float>(now - t0).count();
-    const connection::StatePktV1 pkt_host = connection::state_to_state_pktv1(seq, t_mono_s, s);
-    const connection::StatePktV1 pkt = connection::state_pktv1_host_to_net(pkt_host);
-    const connection::MsgHdr h = connection::make_hdr(connection::MSG_STATE, (uint16_t)sizeof(pkt));
+    const connection::StatesPkt pkt = connection::state_to_state_pkt(seq, t_mono_s, s);
+    const connection::MsgHdr h = connection::make_hdr(connection::MSG_STATE,
+                                                       static_cast<uint8_t>(sizeof(pkt)));
 
     for (size_t i = 0; i < state_clients.size(); )
     {
@@ -322,6 +294,10 @@ int main(int argc, char **argv)
         continue;
       }
       ++i;
+    }
+
+    if (do_print) {
+      states_recorder.record_state(utils::now(), s);
     }
 
     // ---- fixed-rate schedule ----

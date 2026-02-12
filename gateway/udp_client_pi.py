@@ -37,7 +37,7 @@ def rx_loop(rx: UDPRxSockets, print_hz: float, stop: threading.Event) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="UDP client to read Rosmaster state packets")
-    parser.add_argument("--print-hz", type=float, default=1.0, help="State print rate (Hz, 0=off)")
+    parser.add_argument("--print-hz", type=float, default=1.0, help="States print rate (Hz, 0=off)")
     args = parser.parse_args()
 
     cfg = load_config_options()

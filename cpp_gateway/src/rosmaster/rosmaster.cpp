@@ -1,6 +1,8 @@
 #include "rosmaster/rosmaster.hpp"
 #include "utils/cast.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -11,6 +13,17 @@ constexpr float GYRO_RATIO {1.0f / 3754.9f};
 constexpr float ACCEL_RATIO{1.0f / 1671.84f};
 constexpr float MAG_RATIO  {1.0f};
 constexpr float Milli_RATIO  {1.0f / 1000.0f};
+
+namespace {
+  [[nodiscard]] core::Vec3d parse_vec3d(const uint8_t* d) noexcept {
+    core::Vec3d vec;
+    vec.x = utils::le_i16(d+0);
+    vec.y = utils::le_i16(d+2);
+    vec.z = utils::le_i16(d+4);
+    return vec;
+  }
+}
+
 Rosmaster::Rosmaster(const Config& cfg) { connect(cfg); }
 
 Rosmaster::~Rosmaster() {
@@ -42,7 +55,7 @@ void Rosmaster::stop() {
   if (rx_thread_.joinable()) rx_thread_.join();
 }
 
-core::State Rosmaster::get_state() const {
+core::States Rosmaster::get_state() const {
   std::scoped_lock lk(mtx_);
   return st_;
 }
@@ -53,9 +66,7 @@ bool Rosmaster::apply_actions(const core::Actions& actions) {
 }
 
 int Rosmaster::clamp_int(int v, int lo, int hi) {
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
+  return std::clamp(v, lo, hi);
 }
 
 int8_t Rosmaster::limit_motor_value(int v) {
@@ -68,11 +79,13 @@ int8_t Rosmaster::limit_motor_value(int v) {
 // ---------------- Frame building ----------------
 // fixed 0x05 frames: [FF, DEVICE_ID, 0x05, func, p0, p1, checksum]
 bool Rosmaster::send_fixed5(uint8_t func, uint8_t p0, uint8_t p1) {
-  uint8_t cmd[7] = {HEAD, DEVICE_ID, 0x05, func, p0, p1, 0};
+  std::array<uint8_t, 7> cmd{HEAD, DEVICE_ID, 0x05, func, p0, p1, 0};
   uint8_t sum = COMPLEMENT;
-  for (int i = 0; i < 6; i++) sum = static_cast<uint8_t>(sum + cmd[i]);
-  cmd[6] = sum;
-  const bool ok = ser_.writeAll(cmd, sizeof(cmd));
+  for (size_t i = 0; i + 1 < cmd.size(); i++) {
+    sum = static_cast<uint8_t>(sum + cmd[i]);
+  }
+  cmd.back() = sum;
+  const bool ok = ser_.writeAll(cmd);
   std::this_thread::sleep_for(cfg_.cmd_delay);
   return ok;
 }
@@ -165,16 +178,16 @@ void Rosmaster::parse_payload(uint8_t ext_type, const uint8_t* d, size_t n) {
   }
 
   if (ext_type == FUNC_REPORT_MPU_RAW && n >= 18) {
-    st_.imu.gyro = core::scale_vec3d(core::rearrange_gyro(core::parse_vec3d(d)), GYRO_RATIO);
-    st_.imu.acc = core::scale_vec3d(core::parse_vec3d(d+6), ACCEL_RATIO);
-    st_.imu.mag = core::scale_vec3d(core::parse_vec3d(d+12), MAG_RATIO);
+    st_.imu.gyro = core::scale_vec3d(core::rearrange_gyro(parse_vec3d(d)), GYRO_RATIO);
+    st_.imu.acc = core::scale_vec3d(parse_vec3d(d+6), ACCEL_RATIO);
+    st_.imu.mag = core::scale_vec3d(parse_vec3d(d+12), MAG_RATIO);
     return;
   }
 
   if (ext_type == FUNC_REPORT_ICM_RAW && n >= 18) {
-    st_.imu.gyro = core::scale_vec3d(core::parse_vec3d(d), Milli_RATIO);
-    st_.imu.acc = core::scale_vec3d(core::parse_vec3d(d+6), Milli_RATIO);
-    st_.imu.mag = core::scale_vec3d(core::parse_vec3d(d+12), Milli_RATIO);
+    st_.imu.gyro = core::scale_vec3d(parse_vec3d(d), Milli_RATIO);
+    st_.imu.acc = core::scale_vec3d(parse_vec3d(d+6), Milli_RATIO);
+    st_.imu.mag = core::scale_vec3d(parse_vec3d(d+12), Milli_RATIO);
     return;
   }
 

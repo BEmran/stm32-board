@@ -48,7 +48,7 @@ def tx_loop(sock: socket.socket, rate_hz: float, stop: threading.Event) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TCP client for local-only server")
-    parser.add_argument("--print-hz", type=float, default=1.0, help="State print rate (Hz, 0=off)")
+    parser.add_argument("--print-hz", type=float, default=1.0, help="States print rate (Hz, 0=off)")
     parser.add_argument("--cmd-rate-hz", type=float, default=10.0, help="Command send rate (Hz)")
     parser.add_argument("--no-tx", action="store_true", help="Disable command transmit")
     args = parser.parse_args()

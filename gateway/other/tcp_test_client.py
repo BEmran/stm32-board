@@ -78,7 +78,7 @@ def main() -> None:
     parser.add_argument("--motor-step", type=int, default=None, help="Motor step per tick")
     parser.add_argument("--motor-limit", type=int, default=None, help="Motor absolute limit")
     parser.add_argument("--beep-period", type=int, default=None, help="Beep every N commands (0=off)")
-    parser.add_argument("--print-hz", type=float, default=1.0, help="State print rate (Hz)")
+    parser.add_argument("--print-hz", type=float, default=1.0, help="States print rate (Hz)")
     parser.add_argument("--no-tx", action="store_true", help="Disable command transmit")
     args = parser.parse_args()
 

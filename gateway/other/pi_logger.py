@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Optional
 from Rosmaster_Lib import Rosmaster
 from udp import UDPSockets
-from state_logger import StateLogger
+from state_logger import StatesLogger
 from config_loader import *
 from protocol import *
 
@@ -49,7 +49,7 @@ def main():
     n = 0
     last_cmd_seq = None
     state_seq = 0
-    with StateLogger(log_dir, prefix) as dlogger:
+    with StatesLogger(log_dir, prefix) as dlogger:
         try:
             while True:
                 now_mono = time.perf_counter()

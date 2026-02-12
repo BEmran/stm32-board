@@ -1,6 +1,8 @@
 #include "connection/serial_port.hpp"
 
+#include <cerrno>
 #include <fcntl.h>
+#include <string>
 #include <termios.h>
 #include <unistd.h>
 
@@ -17,11 +19,12 @@ static speed_t baudToConst(int baud) {
   }
 }
 
-SerialPort::~SerialPort() { close(); }
+SerialPort::~SerialPort() noexcept { close(); }
 
-bool SerialPort::open(const std::string& device, int baud) {
+bool SerialPort::open(std::string_view device, int baud) {
   close();
-  fd_ = ::open(device.c_str(), O_RDWR | O_NOCTTY);
+  const std::string dev(device);
+  fd_ = ::open(dev.c_str(), O_RDWR | O_NOCTTY);
   if (fd_ < 0) return false;
 
   termios tty{};
@@ -48,17 +51,18 @@ bool SerialPort::open(const std::string& device, int baud) {
   return true;
 }
 
-void SerialPort::close() {
+void SerialPort::close() noexcept {
   if (fd_ >= 0) ::close(fd_);
   fd_ = -1;
 }
 
-bool SerialPort::isOpen() const { return fd_ >= 0; }
+bool SerialPort::isOpen() const noexcept { return fd_ >= 0; }
 
 bool SerialPort::readExact(uint8_t* dst, size_t n) {
   size_t got = 0;
   while (got < n) {
     const ssize_t r = ::read(fd_, dst + got, n - got);
+    if (r < 0 && errno == EINTR) continue;
     if (r <= 0) return false;
     got += static_cast<size_t>(r);
   }
@@ -69,6 +73,7 @@ bool SerialPort::writeAll(const uint8_t* data, size_t n) {
   size_t sent = 0;
   while (sent < n) {
     const ssize_t w = ::write(fd_, data + sent, n - sent);
+    if (w < 0 && errno == EINTR) continue;
     if (w <= 0) return false;
     sent += static_cast<size_t>(w);
   }

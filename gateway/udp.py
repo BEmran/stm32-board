@@ -7,7 +7,7 @@ from typing import Optional
 
 class UDPSockets():
     def __init__(self, tx_ip: str, tx_port: int, rx_ip: str, rx_port: int):
-        # State TX
+        # States TX
         self.tx = UDPTxSockets(tx_ip, tx_port)
         self.rx = UDPRxSockets(rx_ip, rx_port)
     
@@ -20,7 +20,7 @@ class UDPSockets():
 
 class UDPTxSockets():
     def __init__(self, ip: str, port: int):
-        # State TX
+        # States TX
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.state_addr = (ip, port)
         print(f"[INFO] Transmit -> udp://{ip}:{port}")

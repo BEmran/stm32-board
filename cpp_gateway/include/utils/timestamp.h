@@ -1,6 +1,7 @@
 #pragma once
 #include "core/basic.hpp"
-#include <sstream>
+#include <string>
+#include <string_view>
 
 namespace utils {
 /**
@@ -19,5 +20,5 @@ namespace utils {
  */
 [[nodiscard]] double monotonic_now() noexcept;
 
-std::ostringstream timestamp_string (const char* fmt = "%Y-%m-%d_%H-%M-%S");
-}
+[[nodiscard]] std::string timestamp_string(std::string_view fmt = "%Y-%m-%d_%H-%M-%S");
+} // namespace utils

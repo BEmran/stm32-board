@@ -3,6 +3,7 @@
 #include "connection/framed.hpp"
 #include "utils/logger.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -10,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -19,6 +21,8 @@ constexpr uint16_t DEFAULT_CMD_PORT{30002};
 
 static std::atomic<bool> g_run{true};
 static void on_sigint(int) { g_run.store(false); }
+
+using namespace std::chrono_literals;
 
 struct Config {
   std::string server_ip{DEFAULT_SERVER_IP};
@@ -39,32 +43,30 @@ static bool parse_config(int argc, char **argv, Config &config)
   // Examples:
   //  --server_ip 192.168.1.10 --state_port 30001 --cmd_port 30002
   //  --print_hz 10 --cmd_hz 50 --m1 20 --m2 20 --m3 20 --m4 20
-  for (int i = 1; i < argc; i++)
-  {
-    std::string a = argv[i];
-    auto need = [&](const char *name) -> std::string {
-      if (i + 1 >= argc)
-      {
+  for (int i = 1; i < argc; i++) {
+    std::string_view a = argv[i];
+    auto need = [&](std::string_view name) -> std::string_view {
+      if (i + 1 >= argc) {
         logger::error() << "Missing value for " << name << "\n";
         std::exit(2);
       }
-      return std::string(argv[++i]);
+      return argv[++i];
     };
 
-    if (a == "--server_ip") config.server_ip = need("--server_ip");
-    else if (a == "--state_port") config.state_port = (uint16_t)std::stoi(need("--state_port"));
-    else if (a == "--cmd_port") config.cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
+    if (a == "--server_ip") config.server_ip = std::string(need("--server_ip"));
+    else if (a == "--state_port") config.state_port = static_cast<uint16_t>(std::stoi(std::string(need("--state_port"))));
+    else if (a == "--cmd_port") config.cmd_port = static_cast<uint16_t>(std::stoi(std::string(need("--cmd_port"))));
 
-    else if (a == "--print_hz") config.print_hz = std::stod(need("--print_hz"));
-    else if (a == "--cmd_hz") config.cmd_hz = std::stod(need("--cmd_hz"));
+    else if (a == "--print_hz") config.print_hz = std::stod(std::string(need("--print_hz")));
+    else if (a == "--cmd_hz") config.cmd_hz = std::stod(std::string(need("--cmd_hz")));
 
-    else if (a == "--m1") config.m1 = std::stoi(need("--m1"));
-    else if (a == "--m2") config.m2 = std::stoi(need("--m2"));
-    else if (a == "--m3") config.m3 = std::stoi(need("--m3"));
-    else if (a == "--m4") config.m4 = std::stoi(need("--m4"));
+    else if (a == "--m1") config.m1 = std::stoi(std::string(need("--m1")));
+    else if (a == "--m2") config.m2 = std::stoi(std::string(need("--m2")));
+    else if (a == "--m3") config.m3 = std::stoi(std::string(need("--m3")));
+    else if (a == "--m4") config.m4 = std::stoi(std::string(need("--m4")));
 
-    else if (a == "--beep_ms") config.beep_ms = std::stoi(need("--beep_ms"));
-    else if (a == "--flags") config.flags = (uint32_t)std::stoul(need("--flags"));
+    else if (a == "--beep_ms") config.beep_ms = std::stoi(std::string(need("--beep_ms")));
+    else if (a == "--flags") config.flags = static_cast<uint32_t>(std::stoul(std::string(need("--flags"))));
 
     else if (a == "--help")
     {
@@ -121,7 +123,7 @@ int main(int argc, char *argv[])
       << " motors=(" << config.m1 << "," << config.m2 << "," << config.m3 << "," << config.m4 << ")\n";
 
   // --- CMD sender thread ---
-  std::thread cmd_thread([&](){
+  std::thread cmd_thread([&]() {
     using clock = std::chrono::steady_clock;
 
     if (config.cmd_hz <= 0.0) return;
@@ -133,20 +135,23 @@ int main(int argc, char *argv[])
 
     while (g_run.load())
     {
-      connection::CmdPktV1 cmd{};
+      connection::CmdPkt cmd{};
       cmd.seq = ++seq;
 
-      // NOTE: these fields must match your CmdPktV1 definition
-      cmd.m1 = (int16_t)config.m1;
-      cmd.m2 = (int16_t)config.m2;
-      cmd.m3 = (int16_t)config.m3;
-      cmd.m4 = (int16_t)config.m4;
+      cmd.actions.motors.m1 = static_cast<int16_t>(config.m1);
+      cmd.actions.motors.m2 = static_cast<int16_t>(config.m2);
+      cmd.actions.motors.m3 = static_cast<int16_t>(config.m3);
+      cmd.actions.motors.m4 = static_cast<int16_t>(config.m4);
 
-      cmd.beep_ms = (uint16_t)config.beep_ms;
-      cmd.flags = config.flags;
+      const int beep_ms = std::clamp(config.beep_ms, 0, 255);
+      const uint32_t flags = static_cast<uint32_t>(std::clamp(config.flags, 0u, 255u));
 
-      const connection::CmdPktV1 cmd_net = connection::cmd_pktv1_host_to_net(cmd);
-      const connection::MsgHdr h = connection::make_hdr(connection::MSG_CMD, (uint16_t)sizeof(cmd_net));
+      cmd.actions.beep_ms = static_cast<uint8_t>(beep_ms);
+      cmd.actions.flags = static_cast<uint8_t>(flags);
+
+      const connection::CmdPkt cmd_net = cmd;
+      const connection::MsgHdr h = connection::make_hdr(connection::MSG_CMD,
+                                                        static_cast<uint8_t>(sizeof(cmd_net)));
 
       if (!cmd_sock.send_all(&h, sizeof(h)) || !cmd_sock.send_all(&cmd_net, sizeof(cmd_net)))
       {
@@ -186,11 +191,10 @@ int main(int argc, char *argv[])
       while (frx.pop(type, payload))
       {
         if (type != connection::MSG_STATE) continue;
-        if (payload.size() != sizeof(connection::StatePktV1)) continue;
+        if (payload.size() != sizeof(connection::StatesPkt)) continue;
 
-        connection::StatePktV1 pkt_net{};
-        std::memcpy(&pkt_net, payload.data(), sizeof(pkt_net));
-        const connection::StatePktV1 pkt = connection::state_pktv1_net_to_host(pkt_net);
+        connection::StatesPkt pkt{};
+        std::memcpy(&pkt, payload.data(), sizeof(pkt));
 
         if (min_dt <= 0.0) continue;
         const auto now = clock::now();
@@ -199,20 +203,20 @@ int main(int argc, char *argv[])
 
         logger::info() << "[TCP_CLIENT] STATE seq=" << pkt.seq
                        << " t_mono=" << pkt.t_mono_s
-                       << " roll=" << pkt.roll
-                       << " pitch=" << pkt.pitch
-                       << " yaw=" << pkt.yaw
-                       << " enc1=" << pkt.e1
-                       << " enc2=" << pkt.e2
-                       << " enc3=" << pkt.e3
-                       << " enc4=" << pkt.e4
-                       << " batt=" << pkt.battery_voltage << "\n";
+                       << " roll=" << pkt.state.ang.roll
+                       << " pitch=" << pkt.state.ang.pitch
+                       << " yaw=" << pkt.state.ang.yaw
+                       << " enc1=" << pkt.state.enc.e1
+                       << " enc2=" << pkt.state.enc.e2
+                       << " enc3=" << pkt.state.enc.e3
+                       << " enc4=" << pkt.state.enc.e4
+                       << " batt=" << pkt.state.battery_voltage << "\n";
       }
     }
     else
     {
       // no data (or EAGAIN), sleep a bit
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(1ms);
     }
   }
 

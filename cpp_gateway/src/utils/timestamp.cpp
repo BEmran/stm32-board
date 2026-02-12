@@ -1,8 +1,6 @@
 #include "utils/timestamp.h"
 #include <chrono>
 #include <ctime>
-#include <string>
-#include <iostream>
 #include <iomanip>
 
 namespace utils {
@@ -29,7 +27,7 @@ double monotonic_now() noexcept {
     ).count();
 }
 
-std::ostringstream timestamp_string (const char* fmt) {
+std::string timestamp_string(std::string_view fmt) {
     // Generate timestamp for filename
     auto now = std::chrono::system_clock::now();
     auto time_t_now = std::chrono::system_clock::to_time_t(now);
@@ -41,8 +39,9 @@ std::ostringstream timestamp_string (const char* fmt) {
         localtime_r(&time_t_now, &tm_buf);
     #endif
 
-    std::ostringstream timestamp;
-    timestamp << std::put_time(&tm_buf, "%Y-%m-%d_%H-%M-%S");
-    return timestamp;
+    std::ostringstream oss;
+    const std::string fmt_str(fmt);
+    oss << std::put_time(&tm_buf, fmt_str.c_str());
+    return oss.str();
 }
 }

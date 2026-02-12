@@ -9,7 +9,10 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
+#include <string>
+#include <string_view>
 #include <thread>
 
 constexpr int SERIAL_BAUD{115200};
@@ -25,14 +28,7 @@ static std::atomic<bool> g_run{true};
 
 static void on_sigint(int) { g_run.store(false); }
 
-static int16_t clamp_i16(int v, int lo, int hi)
-{
-  if (v < lo)
-    return (int16_t)lo;
-  if (v > hi)
-    return (int16_t)hi;
-  return (int16_t)v;
-}
+using namespace std::chrono_literals;
 
 struct Config
 {
@@ -46,43 +42,38 @@ struct Config
   double cmd_timeout_s{CMD_TIMEOUT};
 };
 
-bool parse_config(int argc, char **argv, Config& config)
-{
+bool parse_config(int argc, char **argv, Config& config) {
   // Simple CLI:
   //  --serial /dev/ttyUSB0 --baud 115200
   //  --dst_ip 127.0.0.1 --state_port 25001
   //  --bind_ip 0.0.0.0 --cmd_port 25002
   //  --hz 200 --cmd_timeout 0.2
-  for (int i = 1; i < argc; i++)
-  {
-    std::string a = argv[i];
-    auto need = [&](const char *name) -> std::string
-    {
-      if (i + 1 >= argc)
-      {
+  for (int i = 1; i < argc; i++) {
+    std::string_view a = argv[i];
+    auto need = [&](std::string_view name) -> std::string_view {
+      if (i + 1 >= argc) {
         logger::error() << "Missing value for " << name << "\n";
         std::exit(2);
       }
-      return std::string(argv[++i]);
+      return argv[++i];
     };
     if (a == "--serial")
-      config.serial_dev = need("--serial");
+      config.serial_dev = std::string(need("--serial"));
     else if (a == "--baud")
-      config.serial_baud = std::stoi(need("--baud"));
+      config.serial_baud = std::stoi(std::string(need("--baud")));
     else if (a == "--dst_ip")
-      config.dst_ip = need("--dst_ip");
+      config.dst_ip = std::string(need("--dst_ip"));
     else if (a == "--state_port")
-      config.dst_port = (uint16_t)std::stoi(need("--state_port"));
+      config.dst_port = static_cast<uint16_t>(std::stoi(std::string(need("--state_port"))));
     else if (a == "--bind_ip")
-      config.local_ip = need("--bind_ip");
+      config.local_ip = std::string(need("--bind_ip"));
     else if (a == "--cmd_port")
-      config.cmd_port = (uint16_t)std::stoi(need("--cmd_port"));
+      config.cmd_port = static_cast<uint16_t>(std::stoi(std::string(need("--cmd_port"))));
     else if (a == "--hz")
-      config.hz = std::stoi(need("--hz"));
+      config.hz = std::stod(std::string(need("--hz")));
     else if (a == "--cmd_timeout")
-      config.cmd_timeout_s = std::stod(need("--cmd_timeout"));
-    else if (a == "--help")
-    {
+      config.cmd_timeout_s = std::stod(std::string(need("--cmd_timeout")));
+    else if (a == "--help") {
       logger::info() << "Usage: " << argv[0] << " [options]\n"
                                                 "  --serial /dev/ttyUSB0   Serial device\n"
                                                 "  --baud 115200           Serial baud\n"
@@ -93,9 +84,7 @@ bool parse_config(int argc, char **argv, Config& config)
                                                 "  --hz 200                connection publish/apply rate\n"
                                                 "  --cmd_timeout 0.2       Seconds before safety stop if no cmd\n";
       return EXIT_FAILURE;
-    }
-    else
-    {
+    } else {
       std::cerr << "Unknown arg: " << a << "\n";
       return EXIT_FAILURE;
     }
@@ -103,8 +92,7 @@ bool parse_config(int argc, char **argv, Config& config)
   return EXIT_SUCCESS;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   Config config;
   if (parse_config(argc, argv, config) == EXIT_FAILURE) {
     return EXIT_FAILURE;
@@ -120,8 +108,7 @@ int main(int argc, char **argv)
   cfg.baud = config.serial_baud;
   cfg.debug = false;
 
-  if (!bot.connect(cfg))
-  {
+  if (!bot.connect(cfg)) {
     logger::error() << "[GW] Failed to connect to " << cfg.device << "\n";
     return 1;
   }
@@ -130,15 +117,13 @@ int main(int argc, char **argv)
 
   // ---- UDP sockets ----
   connection::UdpSocket state_tx;
-  if (!state_tx.set_tx_destination(config.dst_ip, config.dst_port))
-  {
+  if (!state_tx.set_tx_destination(config.dst_ip, config.dst_port)) {
     logger::error() << "[GW] Failed to set STATE destination " << config.dst_ip << ":" << config.dst_port << "\n";
     return 1;
   }
 
   connection::UdpSocket cmd_rx;
-  if (!cmd_rx.bind_rx(config.local_ip, config.cmd_port, /*nonblocking=*/true))
-  {
+  if (!cmd_rx.bind_rx(config.local_ip, config.cmd_port, /*nonblocking=*/true)) {
     logger::error() << "[GW] Failed to bind CMD RX on " << config.local_ip << ":" << config.cmd_port << "\n";
     return 1;
   }
@@ -153,24 +138,21 @@ int main(int argc, char **argv)
   const auto t0 = clock::now();
   auto next = clock::now();
 
-  connection::CmdPktV1 last_cmd{};
+  connection::CmdPkt last_cmd{};
   bool have_cmd = false;
   auto last_cmd_time = clock::now();
 
   uint32_t state_seq = 0;
 
-  while (g_run.load())
-  {
+  while (g_run.load()) {
     // ---- receive latest CMD (non-blocking) ----
-    for (;;)
-    {
-      connection::CmdPktV1 c_net{};
+    for (;;) {
+      connection::CmdPkt c_net{};
       size_t n = 0;
       if (!cmd_rx.try_recv(&c_net, sizeof(c_net), n))
         break;
-      if (n == sizeof(c_net))
-      {
-        last_cmd = connection::cmd_pktv1_net_to_host(c_net);
+      if (n == sizeof(c_net)) {
+        last_cmd = c_net;
         have_cmd = true;
         last_cmd_time = clock::now();
       }
@@ -181,19 +163,15 @@ int main(int argc, char **argv)
     const bool cmd_valid = have_cmd && (cmd_age <= config.cmd_timeout_s);
 
     // ---- apply command to board ----
-
-    core::Actions actions = connection::cmd_pktv1_to_actions(last_cmd);
-    if (cmd_valid)
-    {
-      bot.apply_actions(actions);
-      actions.beep_ms = 0;
+    if (cmd_valid) {
+      bot.apply_actions(last_cmd.actions);
+      last_cmd.actions.beep_ms = 0;
     }
     // ---- publish state ----
-    const core::State s = bot.get_state();
+    const core::States s = bot.get_state();
     uint32_t seq = ++state_seq;
     double t_mono_s = std::chrono::duration<double>(clock::now() - t0).count();
-    connection::StatePktV1 pkt_host = connection::state_to_state_pktv1(seq, t_mono_s, s);
-    connection::StatePktV1 pkt = connection::state_pktv1_host_to_net(pkt_host);
+    connection::StatesPkt pkt = connection::state_to_state_pkt(seq, static_cast<float>(t_mono_s), s);
     (void)state_tx.send(&pkt, sizeof(pkt));
 
     // ---- fixed-rate schedule ----

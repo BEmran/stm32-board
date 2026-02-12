@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include <utility>
+#include <string>
 
 namespace connection {
 
@@ -20,14 +22,13 @@ UdpSocket::UdpSocket() {
   fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
 }
 
-UdpSocket::~UdpSocket() {
+UdpSocket::~UdpSocket() noexcept {
   if (fd_ >= 0) ::close(fd_);
   fd_ = -1;
 }
 
 UdpSocket::UdpSocket(UdpSocket&& other) noexcept {
-  fd_ = other.fd_;
-  other.fd_ = -1;
+  fd_ = std::exchange(other.fd_, -1);
   has_dst_ = other.has_dst_;
   dst_ = other.dst_;
 }
@@ -35,14 +36,13 @@ UdpSocket::UdpSocket(UdpSocket&& other) noexcept {
 UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
   if (this == &other) return *this;
   if (fd_ >= 0) ::close(fd_);
-  fd_ = other.fd_;
-  other.fd_ = -1;
+  fd_ = std::exchange(other.fd_, -1);
   has_dst_ = other.has_dst_;
   dst_ = other.dst_;
   return *this;
 }
 
-bool UdpSocket::bind_rx(const std::string& local_addr, uint16_t local_port, bool nonblocking) {
+bool UdpSocket::bind_rx(std::string_view local_addr, uint16_t local_port, bool nonblocking) {
   if (fd_ < 0) return false;
 
   int reuse = 1;
@@ -51,7 +51,8 @@ bool UdpSocket::bind_rx(const std::string& local_addr, uint16_t local_port, bool
   ::sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(local_port);
-  if (inet_pton(AF_INET, local_addr.c_str(), &addr.sin_addr) != 1) return false;
+  const std::string ip(local_addr);
+  if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) return false;
 
   if (::bind(fd_, (sockaddr*)&addr, sizeof(addr)) != 0) return false;
 
@@ -61,13 +62,14 @@ bool UdpSocket::bind_rx(const std::string& local_addr, uint16_t local_port, bool
   return true;
 }
 
-bool UdpSocket::set_tx_destination(const std::string& ip, uint16_t port) {
+bool UdpSocket::set_tx_destination(std::string_view ip, uint16_t port) {
   if (fd_ < 0) return false;
 
   std::memset(&dst_, 0, sizeof(dst_));
   dst_.sin_family = AF_INET;
   dst_.sin_port = htons(port);
-  if (inet_pton(AF_INET, ip.c_str(), &dst_.sin_addr) != 1) return false;
+  const std::string ip_str(ip);
+  if (inet_pton(AF_INET, ip_str.c_str(), &dst_.sin_addr) != 1) return false;
 
   has_dst_ = true;
   return true;

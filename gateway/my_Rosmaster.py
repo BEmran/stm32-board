@@ -24,7 +24,7 @@ def initialize_rosmaster(com_port: str, debug: bool=False) -> Rosmaster:
 
 def read_state(bot:Rosmaster):
     # --- Read latest sensor values (updated by receive thread) ---
-    state = State()
+    state = States()
     state.imu.acc.x, state.imu.acc.y, state.imu.acc.z = bot.get_accelerometer_data()
     state.imu.gyro.x, state.imu.gyro.y, state.imu.gyro.z = bot.get_gyroscope_data()
     state.imu.mag.x, state.imu.mag.y, state.imu.mag.z = bot.get_magnetometer_data()
