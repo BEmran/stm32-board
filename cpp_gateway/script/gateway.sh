@@ -1,0 +1,11 @@
+./build/gateway_threaded \
+  --serial /dev/ttyUSB0 --baud 115200 \
+  --bind_ip 0.0.0.0 --state_port 30001 --cmd_port 30002 \
+  --usb_hz 50 --tcp_hz 20 --ctrl_hz 200 \
+  --cmd_timeout 0.2
+  --usb_timeout_mode disable \
+  --usb_timeout_mode enforce \
+  --control_mode pass \
+  --binary_log 1 --log_path ./logs/gateway.bin \
+  --flag_event_mask 0x07 \
+  --flag_start_bit 0 --flag_stop_bit 1 --flag_reset_bit 2

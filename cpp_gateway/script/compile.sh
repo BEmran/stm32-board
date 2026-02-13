@@ -1,4 +1,4 @@
 mkdir -p build
 cd build
-cmake ..
+cmake ../cpp_gateway/
 make -j

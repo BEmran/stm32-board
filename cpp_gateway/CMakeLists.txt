@@ -9,28 +9,29 @@ add_library(rosmaster
   src/connection/serial_port.cpp
   src/connection/tcp_socket.cpp
   src/connection/packets.cpp
-  src/connection/udp_socket.cpp
   src/utils/csv_recorder.cpp
   src/utils/logger.cpp
   src/utils/timestamp.cpp
+  src/utils/binary_log.cpp
 )
 
 target_include_directories(rosmaster PUBLIC include)
 
-add_executable(demo app/demo.cpp)
-target_link_libraries(demo PRIVATE rosmaster)
-
-add_executable(udp_gateway app/udp_gateway.cpp)
-target_link_libraries(udp_gateway PRIVATE rosmaster)
-
-add_executable(udp_client app/udp_client.cpp app/helpper.cpp)
-target_link_libraries(udp_client PRIVATE rosmaster)
-
-add_executable(demo_recorder app/demo_recorder.cpp app/helpper.cpp)
-target_link_libraries(demo_recorder PRIVATE rosmaster)
-
 add_executable(tcp_client app/tcp_client.cpp)
 target_link_libraries(tcp_client PRIVATE rosmaster)
 
-add_executable(tcp_gateway app/tcp_gateway.cpp app/helpper.cpp)
-target_link_libraries(tcp_gateway PRIVATE rosmaster)
+# add_executable(tcp_gateway app/tcp_gateway.cpp app/helpper.cpp)
+# target_link_libraries(tcp_gateway PRIVATE rosmaster)
+
+# New threaded gateway
+add_executable(gateway_threaded
+  app/gateway_main.cpp
+  app/workers/usb_worker.cpp
+  app/workers/tcp_worker.cpp
+  app/workers/controller_worker.cpp
+  app/workers/log_worker.cpp
+)
+target_link_libraries(gateway_threaded PRIVATE rosmaster)
+
+add_executable(decode_gateway_log app/decode_gateway_log.cpp)
+target_link_libraries(decode_gateway_log PRIVATE rosmaster)

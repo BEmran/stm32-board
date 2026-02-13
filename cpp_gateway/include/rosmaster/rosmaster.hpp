@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <array>
+#include <vector>
 
 namespace rosmaster {
 

@@ -12,7 +12,7 @@ namespace connection
 #pragma pack(push, 1)
   struct MsgHdr
   {
-    uint8_t type; // 1=STATE, 2=CMD
+    uint8_t type; // 1=STATE, 2=CMD, 3=SETPOINT, 4=CONFIG
     uint8_t ver;  // protocol version (currently 1)
     uint8_t len;  // payload length (bytes)
   };
@@ -20,9 +20,11 @@ namespace connection
 
   static_assert(sizeof(MsgHdr) == 3, "MsgHdr must be 3 bytes");
 
-  inline constexpr uint8_t MSG_VER = 1;
-  inline constexpr uint8_t MSG_STATE = 1;
-  inline constexpr uint8_t MSG_CMD = 2;
+  constexpr uint8_t MSG_VER = 1;
+  constexpr uint8_t MSG_STATE = 1;
+  constexpr uint8_t MSG_CMD = 2;       // legacy
+  constexpr uint8_t MSG_SETPOINT = 3;  // new
+  constexpr uint8_t MSG_CONFIG = 4;    // new
 
   inline MsgHdr make_hdr(uint8_t type, uint8_t payload_len)
   {
@@ -49,7 +51,7 @@ namespace connection
     }
 
     // Try to pop one complete frame. Returns true if a frame was produced.
-     bool pop(uint8_t &out_type, std::vector<uint8_t> &out_payload)
+    bool pop(uint8_t &out_type, std::vector<uint8_t> &out_payload)
     {
       if (buf_.size() < sizeof(MsgHdr))
         return false;
@@ -77,6 +79,7 @@ namespace connection
 
       if (buf_.size() < total)
         return false;
+
       out_type = h.type;
       out_payload.assign(buf_.begin() + sizeof(MsgHdr), buf_.begin() + total);
       buf_.erase(buf_.begin(), buf_.begin() + total);

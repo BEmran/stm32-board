@@ -1,1 +1,0 @@
-./build/tcp_client --server_ip 192.168.68.101 --state_port 30001 --cmd_port 30002 --print_hz 10 --cmd_hz 50 --m1 20 --m2 20 --m3 20 --m4 20
