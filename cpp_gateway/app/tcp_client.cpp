@@ -224,7 +224,7 @@ static bool send_frame(connection::TcpSocket &sock, uint8_t type, const void *pa
   // If we couldn't send quickly, drop the frame (keeps app responsive).
   return false;
 }
-}
+
 
 int main(int argc, char *argv[])
 {
