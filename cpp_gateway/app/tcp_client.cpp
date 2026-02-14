@@ -4,6 +4,7 @@
 #include "connection/framed.hpp"
 #include "utils/logger.hpp"
 
+#include <array>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -192,12 +193,37 @@ static bool parse_config(int argc, char **argv, Config &config)
   return true;
 }
 
+
 static bool send_frame(connection::TcpSocket &sock, uint8_t type, const void *payload, uint8_t payload_len)
 {
+  // Best-effort, interruptible send (so Ctrl+C always works quickly).
+  // We avoid blocking indefinitely inside send_all/poll if the peer stops reading.
+  std::array<uint8_t, sizeof(connection::MsgHdr) + 255> buf{};
   const connection::MsgHdr h = connection::make_hdr(type, payload_len);
-  if (!sock.send_all(&h, sizeof(h))) return false;
-  if (payload_len == 0) return true;
-  return sock.send_all(payload, payload_len);
+  std::memcpy(buf.data(), &h, sizeof(h));
+  if (payload_len > 0 && payload != nullptr) {
+    std::memcpy(buf.data() + sizeof(h), payload, payload_len);
+  }
+
+  const size_t total = sizeof(h) + static_cast<size_t>(payload_len);
+  size_t off = 0;
+
+  // Bound how long we try to send a single frame (latest-wins behavior).
+  constexpr int kMaxIters = 200; // ~200ms worst-case with 1ms sleeps
+  for (int it = 0; it < kMaxIters && g_run.load(); ++it) {
+    size_t sent = 0;
+    if (!sock.try_send(buf.data() + off, total - off, sent)) return false;
+    if (sent > 0) {
+      off += sent;
+      if (off >= total) return true;
+      continue;
+    }
+    // would block
+    std::this_thread::sleep_for(1ms);
+  }
+  // If we couldn't send quickly, drop the frame (keeps app responsive).
+  return false;
+}
 }
 
 int main(int argc, char *argv[])

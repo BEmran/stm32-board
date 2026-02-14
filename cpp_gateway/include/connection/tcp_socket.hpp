@@ -26,8 +26,9 @@ namespace connection
      bool accept_client(TcpSocket &out, bool nonblocking = false);
      bool set_nonblocking(bool on = true);
 
-     bool send_all(const void *data, size_t len) const;
-     bool recv_all(void *data, size_t len) const;
+          bool send_all(const void *data, size_t len) const;
+     bool try_send(const void *data, size_t len, size_t &out_nbytes) const;
+          bool recv_all(void *data, size_t len) const;
      bool try_recv(void *data, size_t len, size_t &out_nbytes) const;
 
     void close() noexcept;

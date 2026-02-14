@@ -139,6 +139,29 @@ bool TcpSocket::send_all(const void* data, size_t len) const {
   return true;
 }
 
+
+bool TcpSocket::try_send(const void* data, size_t len, size_t& out_nbytes) const {
+  out_nbytes = 0;
+  if (fd_ < 0) return false;
+  const int flags =
+#ifdef MSG_NOSIGNAL
+    MSG_NOSIGNAL;
+#else
+    0;
+#endif
+  const ssize_t n = ::send(fd_, data, len, flags);
+  if (n < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+      out_nbytes = 0;
+      return true; // would block, try later
+    }
+    return false;
+  }
+  if (n == 0) return false;
+  out_nbytes = static_cast<size_t>(n);
+  return true;
+}
+
 bool TcpSocket::recv_all(void* data, size_t len) const {
   if (fd_ < 0) return false;
   uint8_t* p = static_cast<uint8_t*>(data);
