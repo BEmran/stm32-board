@@ -34,7 +34,7 @@ void LogWorker::operator()() {
   auto last_warn = clock::now();
   auto last_info = clock::now();
 
-  uint64_t last_state_d = 0, last_action_d = 0, last_event_d = 0, last_sys_event_d = 0;
+  uint64_t last_state_d = 0, last_cmd_d = 0, last_event_d = 0, last_sys_event_d = 0;
   uint64_t last_event_q_d = 0, last_sys_q_d = 0;
 
   while (!stop_.stop_requested()) {
@@ -90,13 +90,13 @@ void LogWorker::operator()() {
       const uint64_t sqd = sh_.sys_event_q.drops();
 
       if (sd != last_state_d) logger::warn() << "[DROP] state_ring=" << sd << "\n";
-      if (ad != last_action_d) logger::warn() << "[DROP] cmd_ring=" << ad << "\n";
+      if (ad != last_cmd_d) logger::warn() << "[DROP] cmd_ring=" << ad << "\n";
       if (ed != last_event_d) logger::warn() << "[DROP] event_ring=" << ed << "\n";
       if (xd != last_sys_event_d) logger::warn() << "[DROP] sys_event_ring=" << xd << "\n";
       if (eqd != last_event_q_d) logger::warn() << "[DROP] event_cmd_q=" << eqd << "\n";
       if (sqd != last_sys_q_d) logger::warn() << "[DROP] sys_event_q=" << sqd << "\n";
 
-      last_state_d = sd; last_action_d = ad; last_event_d = ed; last_sys_event_d = xd;
+      last_state_d = sd; last_cmd_d = ad; last_event_d = ed; last_sys_event_d = xd;
       last_event_q_d = eqd; last_sys_q_d = sqd;
     }
 

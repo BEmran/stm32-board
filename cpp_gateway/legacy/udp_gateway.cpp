@@ -164,8 +164,7 @@ int main(int argc, char **argv) {
 
     // ---- apply command to board ----
     if (cmd_valid) {
-      bot.apply_actions(last_cmd.actions);
-      last_cmd.actions.beep_ms = 0;
+      bot.apply_motor_cmd(last_cmd);
     }
     // ---- publish state ----
     const core::States s = bot.get_state();

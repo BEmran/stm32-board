@@ -26,7 +26,7 @@ namespace helpper
 
     std::string to_string(const core::States &states);
 
-    std::string to_string(const core::MotorCommands &actions);
+    std::string to_string(const core::MotorCommands &cmd);
 
     std::string to_string(const connection::StatesPkt &pkt);
     std::string to_string(const connection::CmdPkt &pkt);
