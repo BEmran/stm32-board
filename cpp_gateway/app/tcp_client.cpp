@@ -1,5 +1,6 @@
 #include "connection/tcp_socket.hpp"
 #include "connection/packets.hpp"
+#include "connection/wire_codec.hpp"
 #include "connection/framed.hpp"
 #include "utils/logger.hpp"
 
@@ -236,14 +237,17 @@ int main(int argc, char *argv[])
 
   // Optional CONFIG one-shot at start
   if (config.send_config) {
-    connection::ConfigPkt cp{};
+    connection::wire::ConfigPayload cp{};
     cp.seq = 1;
     cp.key = config.cfg_key;
     cp.u8  = config.cfg_u8;
     cp.u16 = config.cfg_u16;
     cp.u32 = config.cfg_u32;
 
-    if (!send_frame(cmd_sock, connection::MSG_CONFIG, &cp, static_cast<uint8_t>(sizeof(cp)))) {
+    std::array<uint8_t, connection::wire::kConfigPayloadSize> buf{};
+    connection::wire::encode_config_payload(buf, cp);
+
+    if (!send_frame(cmd_sock, connection::MSG_CONFIG, buf.data(), static_cast<uint8_t>(buf.size()))) {
       logger::warn() << "[TCP_CLIENT] CONFIG send failed.\n";
     } else {
       logger::info() << "[TCP_CLIENT] CONFIG sent: key=" << unsigned(cp.key)
@@ -264,7 +268,7 @@ int main(int argc, char *argv[])
     uint32_t seq = 0;
 
     while (g_run.load()) {
-      connection::CmdPkt cmd{};
+      connection::wire::CmdPayload cmd{};
       cmd.seq = ++seq;
 
       cmd.actions.motors.m1 = static_cast<int16_t>(config.m1);
@@ -278,7 +282,9 @@ int main(int argc, char *argv[])
       cmd.actions.beep_ms = static_cast<uint8_t>(beep_ms);
       cmd.actions.flags   = static_cast<uint8_t>(flags);
 
-      if (!send_frame(cmd_sock, connection::MSG_CMD, &cmd, static_cast<uint8_t>(sizeof(cmd)))) {
+      std::array<uint8_t, connection::wire::kCmdPayloadSize> cbuf{};
+      connection::wire::encode_cmd_payload(cbuf, cmd);
+      if (!send_frame(cmd_sock, connection::MSG_CMD, cbuf.data(), static_cast<uint8_t>(cbuf.size()))) {
         logger::warn() << "[TCP_CLIENT] CMD send failed -> disconnect.\n";
         break;
       }
@@ -299,17 +305,19 @@ int main(int argc, char *argv[])
     uint32_t seq = 0;
 
     while (g_run.load()) {
-      connection::SetpointPkt sp{};
+      connection::wire::SetpointPayload sp{};
       sp.seq = ++seq;
-      sp.sp0 = config.sp0;
-      sp.sp1 = config.sp1;
-      sp.sp2 = config.sp2;
-      sp.sp3 = config.sp3;
+      sp.sp[0] = config.sp0;
+      sp.sp[1] = config.sp1;
+      sp.sp[2] = config.sp2;
+      sp.sp[3] = config.sp3;
 
       const uint32_t flags = static_cast<uint32_t>(std::clamp(config.sp_flags & 0xFFu, 0u, 255u));
       sp.flags = static_cast<uint8_t>(flags);
 
-      if (!send_frame(cmd_sock, connection::MSG_SETPOINT, &sp, static_cast<uint8_t>(sizeof(sp)))) {
+      std::array<uint8_t, connection::wire::kSetpointPayloadSize> sbuf{};
+      connection::wire::encode_setpoint_payload(sbuf, sp);
+      if (!send_frame(cmd_sock, connection::MSG_SETPOINT, sbuf.data(), static_cast<uint8_t>(sbuf.size()))) {
         logger::warn() << "[TCP_CLIENT] SETPOINT send failed -> disconnect.\n";
         break;
       }
@@ -343,26 +351,30 @@ int main(int argc, char *argv[])
 
       while (frx.pop(type, payload)) {
         if (type != connection::MSG_STATE) continue;
-        if (payload.size() != sizeof(connection::StatesPkt)) continue;
+        if (payload.size() != connection::wire::kStatesPayloadSize) continue;
 
-        connection::StatesPkt pkt{};
-        std::memcpy(&pkt, payload.data(), sizeof(pkt));
+        // Decode explicitly (portable).
+        const uint8_t* p = payload.data();
+        const uint32_t seq = connection::wire::read_u32_le(p + 0);
+        const float t_mono = connection::wire::read_f32_le(p + 4);
+        const int32_t e1 = connection::wire::read_i32_le(p + 56);
+        const float batt = connection::wire::read_f32_le(p + 72);
 
         if (min_dt <= 0.0) continue;
         const auto now = clock::now();
         if (std::chrono::duration<double>(now - last_print).count() < min_dt) continue;
         last_print = now;
 
-        logger::info() << "[TCP_CLIENT] STATE seq=" << pkt.seq
-                       << " t_mono=" << pkt.t_mono_s
-                       << " roll=" << pkt.state.ang.roll
-                       << " pitch=" << pkt.state.ang.pitch
-                       << " yaw=" << pkt.state.ang.yaw
-                       << " enc1=" << pkt.state.enc.e1
-                       << " enc2=" << pkt.state.enc.e2
-                       << " enc3=" << pkt.state.enc.e3
-                       << " enc4=" << pkt.state.enc.e4
-                       << " batt=" << pkt.state.battery_voltage
+        logger::info() << "[TCP_CLIENT] STATE seq=" << seq
+                       << " t_mono=" << t_mono
+                       << " roll=" << connection::wire::read_f32_le(payload.data() + 44)
+                       << " pitch=" << connection::wire::read_f32_le(payload.data() + 48)
+                       << " yaw=" << connection::wire::read_f32_le(payload.data() + 52)
+                       << " enc1=" << e1
+                       << " enc2=" << connection::wire::read_i32_le(payload.data() + 60)
+                       << " enc3=" << connection::wire::read_i32_le(payload.data() + 64)
+                       << " enc4=" << connection::wire::read_i32_le(payload.data() + 68)
+                       << " batt=" << batt
                        << "\n";
       }
     } else {

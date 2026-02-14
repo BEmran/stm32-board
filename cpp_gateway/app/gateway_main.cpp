@@ -9,6 +9,7 @@
 #include "workers/log_worker.hpp"
 
 #include "utils/logger.hpp"
+#include "utils/signal_handler.hpp"
 
 #include <atomic>
 #include <csignal>
@@ -19,11 +20,6 @@
 #include <string_view>
 #include <thread>
 
-static gateway::StopFlag* g_stop_ptr = nullptr;
-
-static void on_signal(int) {
-  if (g_stop_ptr) g_stop_ptr->request_stop();
-}
 
 static bool parse_hex_u8(std::string_view s, uint8_t& out) {
   unsigned int v = 0;
@@ -140,12 +136,9 @@ int main(int argc, char** argv) {
   sh.system_state.store(sys);
 
   gateway::StopFlag stop;
-  g_stop_ptr = &stop;
-
-  std::signal(SIGINT, on_signal);
-  std::signal(SIGTERM, on_signal);
+  utils::SignalHandler sig(stop);
 #ifdef SIGPIPE
-  std::signal(SIGPIPE, SIG_IGN);
+  std::signal(SIGPIPE, SIG_IGN); // avoid termination on broken TCP pipe
 #endif
 
   logger::info() << "[MAIN] Starting threaded gateway.\n";

@@ -1,6 +1,6 @@
 #include "log_worker.hpp"
 
-#include "utils/binary_log.hpp"
+#include "utils/rotating_binary_log.hpp"
 #include "utils/logger.hpp"
 
 #include <chrono>
@@ -16,22 +16,23 @@ LogWorker::LogWorker(SharedState& sh, gateway::StopFlag& stop)
   : sh_(sh), stop_(stop) {}
 
 void LogWorker::operator()() {
-  utils::BinaryLogWriter writer;
+  utils::RotatingBinaryLog writer;
 
   auto cfg_ptr = sh_.cfg.load(std::memory_order_acquire);
   const bool binlog = cfg_ptr ? cfg_ptr->binary_log : true;
   const std::string path = cfg_ptr ? cfg_ptr->log_path : "./logs/gateway.bin";
 
   if (binlog) {
-    if (!writer.open(path)) {
-      logger::warn() << "[LOG] Failed to open binary log: " << path << "\n";
-    } else {
-      logger::info() << "[LOG] Binary logging -> " << path << "\n";
+    const uint64_t max_bytes = cfg_ptr ? (static_cast<uint64_t>(cfg_ptr->log_rotate_mb) * 1024ULL * 1024ULL) : (256ULL * 1024ULL * 1024ULL);
+    const uint32_t keep = cfg_ptr ? cfg_ptr->log_rotate_keep : 10U;
+    if (!writer.open(path, max_bytes, keep)) {
+      logger::warn() << "[LOG] Failed to open rotating binary log: " << path << "\n";
     }
   }
 
   using clock = std::chrono::steady_clock;
   auto last_warn = clock::now();
+  auto last_info = clock::now();
 
   uint64_t last_state_d = 0, last_action_d = 0, last_event_d = 0, last_sys_event_d = 0;
   uint64_t last_event_q_d = 0, last_sys_q_d = 0;
@@ -97,6 +98,36 @@ void LogWorker::operator()() {
 
       last_state_d = sd; last_action_d = ad; last_event_d = ed; last_sys_event_d = xd;
       last_event_q_d = eqd; last_sys_q_d = sqd;
+    }
+
+
+    // Periodic health summary (keep sparse).
+    if (std::chrono::duration<double>(now - last_info).count() >= 5.0) {
+      last_info = now;
+
+      const uint64_t sd2 = sh_.state_ring.drops();
+      const uint64_t ad2 = sh_.action_ring.drops();
+      const uint64_t ed2 = sh_.event_ring.drops();
+      const uint64_t xd2 = sh_.sys_event_ring.drops();
+      const uint64_t eqd2 = sh_.event_cmd_q.drops();
+      const uint64_t sqd2 = sh_.sys_event_q.drops();
+
+      const auto cfg = sh_.cfg.load(std::memory_order_acquire);
+      const double timeout_s = cfg ? cfg->cmd_timeout_s : 0.2;
+      const double last_cmd = sh_.last_cmd_rx_mono_s.load(std::memory_order_acquire);
+
+      double age_s = -1.0;
+      if (last_cmd > 0.0) {
+        age_s = now_timestamps().mono_s - last_cmd;
+      }
+
+      logger::info() << "[HEALTH] drops: state=" << sd2
+                     << " action=" << ad2
+                     << " event=" << ed2
+                     << " sys_event=" << xd2
+                     << " q(event)=" << eqd2
+                     << " q(sys)=" << sqd2
+                     << " | cmd_age=" << age_s << "s (timeout=" << timeout_s << "s)\n";
     }
 
     sleep_for_ms(5);

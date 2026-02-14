@@ -27,10 +27,13 @@ struct RuntimeConfig {
 
   // Control
   ControlMode control_mode{ControlMode::PASS_THROUGH_CMD};
+  int16_t ctrl_thread_priority{0}; // Linux: SCHED_FIFO priority (1..99). 0 disables.
 
   // Logging
   bool binary_log{true};
   std::string log_path{"./logs/gateway.bin"};
+  uint32_t log_rotate_mb{256};   // 0 disables rotation
+  uint32_t log_rotate_keep{10};  // number of rotated files to keep (best-effort)
 
   // Flags routing
   uint8_t flag_event_mask{0x07};

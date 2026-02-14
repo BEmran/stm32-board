@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <array>
+#include <memory>
 #include <vector>
 
 namespace rosmaster {
@@ -25,8 +26,9 @@ struct Config {
 // ---- Rosmaster interface ----
 class Rosmaster {
 public:
-  Rosmaster() = default;
+  Rosmaster();
   explicit Rosmaster(const Config& cfg);
+  explicit Rosmaster(connection::SerialPortPtr port, const Config& cfg = {});
   ~Rosmaster();
 
   bool connect(const Config& cfg);
@@ -92,7 +94,7 @@ private:
 
 private:
   Config cfg_{};
-  connection::SerialPort ser_;
+  connection::SerialPortPtr ser_;
 
   std::atomic<bool> running_{false};
   std::thread rx_thread_;

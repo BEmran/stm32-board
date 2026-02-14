@@ -1,19 +1,14 @@
 #include "controller_worker.hpp"
 
 #include "utils/logger.hpp"
+#include "utils/rate_limiter.hpp"
+#include "utils/thread_sched.hpp"
 
 #include <chrono>
 #include <thread>
 
 namespace workers {
 
-static inline void sleep_to_rate(double hz, std::chrono::steady_clock::time_point& next_tp) {
-  using clock = std::chrono::steady_clock;
-  if (hz <= 0.0) hz = 1.0;
-  const auto dt = std::chrono::duration<double>(1.0 / hz);
-  next_tp += std::chrono::duration_cast<clock::duration>(dt);
-  std::this_thread::sleep_until(next_tp);
-}
 
 static inline bool bit_matches(int bit, uint8_t idx) {
   return (bit >= 0 && bit < 8 && static_cast<uint8_t>(bit) == idx);
@@ -23,8 +18,14 @@ ControllerWorker::ControllerWorker(SharedState& sh, gateway::StopFlag& stop)
   : sh_(sh), stop_(stop) {}
 
 void ControllerWorker::operator()() {
-  using clock = std::chrono::steady_clock;
-  auto next_tp = clock::now();
+  utils::RateLimiter rl;
+  rl.reset();
+
+  // Best-effort real-time scheduling for control loop (Linux).
+  if (auto cfg_ptr = sh_.cfg.load(std::memory_order_acquire)) {
+    (void)utils::try_set_fifo_priority(cfg_ptr->ctrl_thread_priority);
+  }
+
 
   bool warned_timeout = false;
 
@@ -35,7 +36,7 @@ void ControllerWorker::operator()() {
     // Read snapshots
     const core::States st = sh_.latest_state.load_or_default();
     const core::Actions remote_cmd = sh_.latest_remote_cmd.load_or_default();
-    const connection::SetpointPkt sp = sh_.latest_setpoint_cmd.load_or_default();
+    const connection::wire::SetpointPayload sp = sh_.latest_setpoint_cmd.load_or_default();
 
     auto sys = sh_.system_state.load_or_default();
     if (cfg_ptr) sys.control_mode = cfg_ptr->control_mode;
@@ -62,7 +63,7 @@ void ControllerWorker::operator()() {
         zero.flags = 0;
         sh_.latest_remote_cmd.store(zero);
 
-        connection::SetpointPkt zsp{};
+        connection::wire::SetpointPayload zsp{};
         sh_.latest_setpoint_cmd.store(zsp);
       }
     });
@@ -116,8 +117,17 @@ void ControllerWorker::operator()() {
     sh_.system_state.store(sys);
     sh_.latest_action_request.store(out);
 
-    sleep_to_rate(ctrl_hz, next_tp);
+    rl.set_hz(ctrl_hz); rl.sleep();
   }
+
+
+// Safety: ensure the last published action is a "motors off" command so that
+// the USB worker will send a safe command even during shutdown.
+core::Actions zero{};
+zero.motors = {};
+zero.beep_ms = 0;
+zero.flags = 0;
+sh_.latest_action_request.store(zero);
 
   logger::info() << "[CTRL] Stopped.\n";
 }

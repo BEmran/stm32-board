@@ -24,7 +24,21 @@ namespace {
   }
 }
 
-Rosmaster::Rosmaster(const Config& cfg) { connect(cfg); }
+Rosmaster::Rosmaster()
+  : ser_(std::make_unique<connection::SerialPort>()) {}
+
+Rosmaster::Rosmaster(const Config& cfg)
+  : ser_(std::make_unique<connection::SerialPort>()) {
+  connect(cfg);
+}
+
+Rosmaster::Rosmaster(connection::SerialPortPtr port, const Config& cfg)
+  : cfg_(cfg), ser_(std::move(port)) {
+  if (!ser_) ser_ = std::make_unique<connection::SerialPort>();
+  if (!cfg.device.empty()) {
+    connect(cfg);
+  }
+}
 
 Rosmaster::~Rosmaster() {
   stop();
@@ -33,17 +47,17 @@ Rosmaster::~Rosmaster() {
 
 bool Rosmaster::connect(const Config& cfg) {
   cfg_ = cfg;
-  if (!ser_.open(cfg_.device, cfg_.baud)) return false;
+  if (!ser_->open(cfg_.device, cfg_.baud)) return false;
   if (cfg_.debug) std::cout << "Rosmaster Serial Opened! Baudrate=" << cfg_.baud << "\n";
   std::this_thread::sleep_for(std::chrono::milliseconds(2));
   return true;
 }
 
-void Rosmaster::disconnect() { ser_.close(); }
+void Rosmaster::disconnect() { ser_->close(); }
 
 bool Rosmaster::start() {
   if (running_.load()) return true;
-  if (!ser_.isOpen()) return false;
+  if (!ser_->is_open()) return false;
   running_.store(true);
   rx_thread_ = std::thread(&Rosmaster::rx_loop, this);
   std::this_thread::sleep_for(std::chrono::milliseconds(50)); // like python create_receive_threading
@@ -85,7 +99,7 @@ bool Rosmaster::send_fixed5(uint8_t func, uint8_t p0, uint8_t p1) {
     sum = static_cast<uint8_t>(sum + cmd[i]);
   }
   cmd.back() = sum;
-  const bool ok = ser_.writeAll(cmd);
+  const bool ok = ser_->write_all(cmd);
   std::this_thread::sleep_for(cfg_.cmd_delay);
   return ok;
 }
@@ -106,7 +120,7 @@ bool Rosmaster::send_var(uint8_t func, const std::vector<uint8_t>& payload) {
   for (auto b : cmd) sum = static_cast<uint8_t>(sum + b);
   cmd.push_back(sum);
 
-  const bool ok = ser_.writeAll(cmd.data(), cmd.size());
+  const bool ok = ser_->write_all(cmd.data(), cmd.size());
   std::this_thread::sleep_for(cfg_.cmd_delay);
   return ok;
 }
@@ -131,23 +145,23 @@ void Rosmaster::rx_loop() {
   // head1=0xFF, head2=DEVICE_ID-1, ext_len, ext_type, (ext_len-2) data bytes incl checksum :contentReference[oaicite:3]{index=3}
   while (running_.load()) {
     uint8_t h1{};
-    if (!ser_.readExact(&h1, 1)) continue;
+    if (!ser_->read_exact(&h1, 1)) continue;
     if (h1 != HEAD) continue;
 
     uint8_t h2{};
-    if (!ser_.readExact(&h2, 1)) continue;
+    if (!ser_->read_exact(&h2, 1)) continue;
     if (h2 != static_cast<uint8_t>(DEVICE_ID - 1)) continue;
 
     uint8_t ext_len{};
     uint8_t ext_type{};
-    if (!ser_.readExact(&ext_len, 1)) continue;
-    if (!ser_.readExact(&ext_type, 1)) continue;
+    if (!ser_->read_exact(&ext_len, 1)) continue;
+    if (!ser_->read_exact(&ext_type, 1)) continue;
 
     const int data_len = static_cast<int>(ext_len) - 2;
     if (data_len <= 0 || data_len > 200) continue;
 
     std::vector<uint8_t> buf(static_cast<size_t>(data_len));
-    if (!ser_.readExact(buf.data(), buf.size())) continue;
+    if (!ser_->read_exact(buf.data(), buf.size())) continue;
 
     const uint8_t rx_check = buf.back();
     uint32_t sum = static_cast<uint32_t>(ext_len) + static_cast<uint32_t>(ext_type);

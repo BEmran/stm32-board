@@ -55,12 +55,17 @@ struct SharedState {
 
   // Continuous / latest-wins commands
   gateway::LatestValue<core::Actions>        latest_remote_cmd;     // legacy cmd (beep cleared, event bits removed)
-  gateway::LatestValue<connection::SetpointPkt> latest_setpoint_cmd; // setpoint (latest-wins)
+  gateway::LatestValue<connection::wire::SetpointPayload> latest_setpoint_cmd; // setpoint (latest-wins)
   gateway::LatestValue<core::Actions>        latest_action_request;  // controller -> USB
   gateway::LatestValue<SystemState>          system_state;
 
   // Safety: last time we received any "command" from TCP side (mono seconds)
   std::atomic<double> last_cmd_rx_mono_s{0.0};
+
+  // Diagnostics counters
+  std::atomic<uint32_t> tcp_frames_bad{0};
+  std::atomic<uint32_t> serial_errors{0};
+  const double start_mono_s{now_timestamps().mono_s};
 
   // One-shot event queues (overwrite-on-full)
   gateway::SpscOverwriteRing<gateway::EventCmd, 256> event_cmd_q; // TCP -> USB (HW events)
