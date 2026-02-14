@@ -14,12 +14,23 @@
 static void print_help(const char* argv0) {
   std::cout
     << "Usage:\n"
-    << "  " << argv0 << " --in gateway.bin --out_dir ./out\n"
+    << "  " << argv0 << " --in gateway.bin --out_dir ./out [--prefix run1]\n"
     << "\n"
-    << "Outputs:\n"
-    << "  out_dir/state.csv\n"
-    << "  out_dir/action.csv\n"
-    << "  out_dir/event.csv\n";
+    << "Naming:\n"
+    << "  Output files are named as:\n"
+    << "    <out_dir>/<prefix><stamp>_state.csv\n"
+    << "    <out_dir>/<prefix><stamp>_action.csv\n"
+    << "    <out_dir>/<prefix><stamp>_event.csv\n"
+    << "\n"
+    << "  <stamp> is derived from the input filename by default:\n"
+    << "    - If basename contains YYYYMMDD_HHMMSS -> that is used.\n"
+    << "    - Otherwise basename (without extension) is used.\n"
+    << "\n"
+    << "Examples:\n"
+    << "  " << argv0 << " --in ./logs/gateway_20260214_185144_0.bin --out_dir ./out\n"
+    << "    -> out/20260214_185144_state.csv, ...\n"
+    << "  " << argv0 << " --in gateway.bin --out_dir ./out --prefix testA\n"
+    << "    -> out/testA_gateway_state.csv, ...\n";
 }
 
 static bool read_exact(std::ifstream& in, void* dst, std::size_t n) {
@@ -35,6 +46,41 @@ static std::string path_join(std::string_view dir, std::string_view file) {
   return d;
 }
 
+static std::string basename_no_dirs(std::string_view p) {
+  std::size_t pos = p.find_last_of("/\\");
+  if (pos == std::string_view::npos) return std::string(p);
+  return std::string(p.substr(pos + 1));
+}
+
+static std::string strip_extension(std::string_view filename) {
+  std::size_t dot = filename.find_last_of('.');
+  if (dot == std::string_view::npos) return std::string(filename);
+  return std::string(filename.substr(0, dot));
+}
+
+// Extract "YYYYMMDD_HHMMSS" from a string if present, else return empty.
+static std::string extract_yyyymmdd_hhmmss(std::string_view s) {
+  // Look for pattern: 8 digits, '_', 6 digits
+  for (std::size_t i = 0; i + 15 <= s.size(); ++i) {
+    auto isdig = [&](char c) { return c >= '0' && c <= '9'; };
+    bool ok = true;
+    for (int k = 0; k < 8; ++k) ok = ok && isdig(s[i + k]);
+    ok = ok && (s[i + 8] == '_');
+    for (int k = 0; k < 6; ++k) ok = ok && isdig(s[i + 9 + k]);
+    if (ok) return std::string(s.substr(i, 15)); // "YYYYMMDD_HHMMSS"
+  }
+  return {};
+}
+
+static std::string normalize_prefix(std::string_view pfx) {
+  if (pfx.empty()) return {};
+  std::string p(pfx);
+  // Make it nice to read: ensure it ends with '_' unless already ends with '_' or '-'
+  char last = p.back();
+  if (last != '_' && last != '-' ) p.push_back('_');
+  return p;
+}
+
 static const char* record_type_name(utils::RecordType t) {
   switch (t) {
     case utils::RecordType::STATE:  return "STATE";
@@ -46,14 +92,17 @@ static const char* record_type_name(utils::RecordType t) {
 
 static std::string event_type_name(gateway::EventType t) {
   switch (t) {
-    case gateway::EventType::BEEP:          return "BEEP";
-    case gateway::EventType::FLAG_RISE:     return "FLAG_RISE";
-    case gateway::EventType::CONFIG_APPLIED:return "CONFIG_APPLIED";
+    case gateway::EventType::BEEP:           return "BEEP";
+    case gateway::EventType::FLAG_RISE:      return "FLAG_RISE";
+    case gateway::EventType::CONFIG_APPLIED: return "CONFIG_APPLIED";
     default: return "UNKNOWN";
   }
 }
 
-static bool parse_args(int argc, char** argv, std::string& in_path, std::string& out_dir) {
+static bool parse_args(
+    int argc, char** argv,
+    std::string& in_path, std::string& out_dir, std::string& prefix) {
+
   for (int i = 1; i < argc; ++i) {
     std::string_view a = argv[i];
     auto need = [&](std::string_view name) -> std::string_view {
@@ -66,6 +115,7 @@ static bool parse_args(int argc, char** argv, std::string& in_path, std::string&
 
     if (a == "--in") in_path = std::string(need(a));
     else if (a == "--out_dir") out_dir = std::string(need(a));
+    else if (a == "--prefix") prefix = std::string(need(a));
     else if (a == "--help") { print_help(argv[0]); return false; }
     else {
       std::cerr << "Unknown arg: " << a << "\n";
@@ -83,8 +133,27 @@ static bool parse_args(int argc, char** argv, std::string& in_path, std::string&
 }
 
 int main(int argc, char** argv) {
-  std::string in_path, out_dir;
-  if (!parse_args(argc, argv, in_path, out_dir)) return 1;
+  std::string in_path, out_dir, prefix_raw;
+  if (!parse_args(argc, argv, in_path, out_dir, prefix_raw)) return 1;
+
+  const std::string prefix = normalize_prefix(prefix_raw);
+
+  // Derive stamp from input filename by default.
+  const std::string base = basename_no_dirs(in_path);
+  const std::string stamp_from_pattern = extract_yyyymmdd_hhmmss(base);
+  const std::string stamp = !stamp_from_pattern.empty()
+                              ? stamp_from_pattern
+                              : strip_extension(base);
+
+  auto out_name = [&](std::string_view suffix) {
+    // e.g. prefix + "_" + stamp + "_state.csv"
+    std::string name;
+    name.reserve(prefix.size() + stamp.size() + suffix.size());
+    name += prefix;
+    name += stamp;
+    name += suffix;
+    return name;
+  };
 
   std::ifstream in(in_path, std::ios::binary);
   if (!in.is_open()) {
@@ -108,13 +177,21 @@ int main(int argc, char** argv) {
     logger::warn() << "Unexpected version: " << fh.ver << " (expected 1). Attempting to continue.\n";
   }
 
-  // Open CSV outputs
-  std::ofstream state_csv(path_join(out_dir, "state.csv"));
-  std::ofstream action_csv(path_join(out_dir, "action.csv"));
-  std::ofstream event_csv(path_join(out_dir, "event.csv"));
+  // Open CSV outputs with prefix + stamp by default
+  const std::string state_path  = path_join(out_dir, out_name("_state.csv"));
+  const std::string action_path = path_join(out_dir, out_name("_action.csv"));
+  const std::string event_path  = path_join(out_dir, out_name("_event.csv"));
+
+  std::ofstream state_csv(state_path);
+  std::ofstream action_csv(action_path);
+  std::ofstream event_csv(event_path);
 
   if (!state_csv.is_open() || !action_csv.is_open() || !event_csv.is_open()) {
     logger::error() << "Failed to open output CSV(s) in dir: " << out_dir << "\n";
+    logger::error() << "Tried:\n"
+                   << "  " << state_path  << "\n"
+                   << "  " << action_path << "\n"
+                   << "  " << event_path  << "\n";
     return 1;
   }
 
@@ -171,8 +248,6 @@ int main(int argc, char** argv) {
       workers::StateSample s{};
       std::memcpy(&s, payload.data(), sizeof(s));
 
-      // NOTE: this assumes core::States layout matches what you log now.
-      // Adjust fields below if your core::States differs.
       state_csv
         << rh.epoch_s << "," << rh.mono_s << "," << s.seq << ","
         << s.st.ang.roll << "," << s.st.ang.pitch << "," << s.st.ang.yaw << ","
@@ -224,6 +299,10 @@ int main(int argc, char** argv) {
   }
 
   logger::info() << "Decoded " << n_records << " records, skipped " << n_skipped
-                 << " (unknown/size-mismatch). Output dir: " << out_dir << "\n";
+                 << " (unknown/size-mismatch).\n"
+                 << "Outputs:\n"
+                 << "  " << state_path  << "\n"
+                 << "  " << action_path << "\n"
+                 << "  " << event_path  << "\n";
   return 0;
 }
