@@ -160,12 +160,16 @@ void TcpWorker::operator()() {
     logger::warn() << "[TCP] Failed to bind state server on " << bind_ip << ":" << state_port << "\n";
   } else {
     logger::info() << "[TCP] State server listening on " << bind_ip << ":" << state_port << "\n";
+    // IMPORTANT: server sockets must be non-blocking, otherwise accept() will block the whole worker
+    // and prevent state publishing and clean shutdown.
+    (void)state_srv.set_nonblocking(true);
   }
 
   if (!cmd_srv.bind_listen(bind_ip, cmd_port, 4)) {
     logger::warn() << "[TCP] Failed to bind cmd server on " << bind_ip << ":" << cmd_port << "\n";
   } else {
     logger::info() << "[TCP] Cmd server listening on " << bind_ip << ":" << cmd_port << "\n";
+    (void)cmd_srv.set_nonblocking(true);
   }
 
   std::vector<connection::TcpSocket> state_clients;

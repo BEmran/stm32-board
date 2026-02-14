@@ -83,8 +83,11 @@ bool TcpSocket::bind_listen(std::string_view local_addr, uint16_t local_port, in
 bool TcpSocket::accept_client(TcpSocket& out, bool nonblocking) {
   if (fd_ < 0) return false;
 
-  int cfd = ::accept(fd_, nullptr, nullptr);
-  if (cfd < 0) {
+  int cfd = -1;
+  for (;;) {
+    cfd = ::accept(fd_, nullptr, nullptr);
+    if (cfd >= 0) break;
+    if (errno == EINTR) continue;
     if (errno == EAGAIN || errno == EWOULDBLOCK) return false;
     return false;
   }
@@ -153,7 +156,20 @@ bool TcpSocket::try_recv(void* data, size_t len, size_t& out_nbytes) const {
   if (fd_ < 0) return false;
   const ssize_t n = ::recv(fd_, data, len, 0);
   if (n < 0) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) return false;
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      // Non-blocking socket: no data available right now.
+      out_nbytes = 0;
+      return true;
+    }
+    if (errno == EINTR) {
+      out_nbytes = 0;
+      return true;
+    }
+    return false;
+  }
+  if (n == 0) {
+    // Peer closed.
+    out_nbytes = 0;
     return false;
   }
   out_nbytes = static_cast<size_t>(n);

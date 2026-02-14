@@ -12,6 +12,7 @@
 #include "utils/signal_handler.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -148,11 +149,20 @@ int main(int argc, char** argv) {
   std::thread t_ctrl(workers::ControllerWorker(sh, stop));
   std::thread t_log(workers::LogWorker(sh, stop));
 
-  t_tcp.join();
+  // Main thread waits for a stop request (SIGINT/SIGTERM or a worker requesting stop).
+  // This avoids deadlocks if any worker blocks in a join before the stop flag is set.
+  while (!stop.stop_requested()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  // Ensure the stop flag is set for all workers.
   stop.request_stop();
-  t_ctrl.join();
-  t_usb.join();
-  t_log.join();
+
+  // Join workers (order does not matter now that all are stop-aware).
+  if (t_tcp.joinable()) t_tcp.join();
+  if (t_ctrl.joinable()) t_ctrl.join();
+  if (t_usb.joinable()) t_usb.join();
+  if (t_log.joinable()) t_log.join();
 
   logger::info() << "[MAIN] Shutdown complete.\n";
   return 0;

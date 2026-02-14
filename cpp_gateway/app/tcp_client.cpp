@@ -218,6 +218,8 @@ int main(int argc, char *argv[])
                     << config.server_ip << ":" << config.state_port << "\n";
     return 1;
   }
+  // Make receiver loop interruptible by SIGINT (non-blocking recv).
+  (void)state_sock.set_nonblocking(true);
 
   // Connect CMD socket (used for MSG_CMD + MSG_SETPOINT + MSG_CONFIG)
   connection::TcpSocket cmd_sock;
@@ -226,6 +228,7 @@ int main(int argc, char *argv[])
                     << config.server_ip << ":" << config.cmd_port << "\n";
     return 1;
   }
+  (void)cmd_sock.set_nonblocking(true);
 
   logger::info() << "[TCP_CLIENT] Connected. STATE=" << config.server_ip << ":" << config.state_port
                  << " CMD=" << config.server_ip << ":" << config.cmd_port
@@ -339,10 +342,6 @@ int main(int argc, char *argv[])
     size_t n = 0;
 
     if (state_sock.try_recv(tmp, sizeof(tmp), n)) {
-      if (n == 0) {
-        logger::warn() << "[TCP_CLIENT] STATE connection closed.\n";
-        break;
-      }
 
       frx.push_bytes(tmp, n);
 
@@ -378,6 +377,12 @@ int main(int argc, char *argv[])
                        << "\n";
       }
     } else {
+      logger::warn() << "[TCP_CLIENT] STATE connection closed or recv error.\n";
+      break;
+    }
+
+    if (n == 0) {
+      // no data available (non-blocking)
       std::this_thread::sleep_for(1ms);
     }
   }
