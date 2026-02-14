@@ -48,10 +48,10 @@ void LogWorker::operator()() {
       writer.write_record(h, &s, static_cast<uint16_t>(sizeof(s)));
     });
 
-    sh_.action_ring.drain(1024, [&](const ActionSample& a) {
+    sh_.cmd_ring.drain(1024, [&](const MotorCommandsSample& a) {
       if (!writer.is_open()) return;
       utils::RecordHeader h{};
-      h.type = utils::RecordType::ACTION;
+      h.type = utils::RecordType::CMD;
       h.epoch_s = a.ts.epoch_s;
       h.mono_s  = a.ts.mono_s;
       writer.write_record(h, &a, static_cast<uint16_t>(sizeof(a)));
@@ -83,14 +83,14 @@ void LogWorker::operator()() {
       last_warn = now;
 
       const uint64_t sd = sh_.state_ring.drops();
-      const uint64_t ad = sh_.action_ring.drops();
+      const uint64_t ad = sh_.cmd_ring.drops();
       const uint64_t ed = sh_.event_ring.drops();
       const uint64_t xd = sh_.sys_event_ring.drops();
       const uint64_t eqd = sh_.event_cmd_q.drops();
       const uint64_t sqd = sh_.sys_event_q.drops();
 
       if (sd != last_state_d) logger::warn() << "[DROP] state_ring=" << sd << "\n";
-      if (ad != last_action_d) logger::warn() << "[DROP] action_ring=" << ad << "\n";
+      if (ad != last_action_d) logger::warn() << "[DROP] cmd_ring=" << ad << "\n";
       if (ed != last_event_d) logger::warn() << "[DROP] event_ring=" << ed << "\n";
       if (xd != last_sys_event_d) logger::warn() << "[DROP] sys_event_ring=" << xd << "\n";
       if (eqd != last_event_q_d) logger::warn() << "[DROP] event_cmd_q=" << eqd << "\n";
@@ -106,7 +106,7 @@ void LogWorker::operator()() {
       last_info = now;
 
       const uint64_t sd2 = sh_.state_ring.drops();
-      const uint64_t ad2 = sh_.action_ring.drops();
+      const uint64_t ad2 = sh_.cmd_ring.drops();
       const uint64_t ed2 = sh_.event_ring.drops();
       const uint64_t xd2 = sh_.sys_event_ring.drops();
       const uint64_t eqd2 = sh_.event_cmd_q.drops();
@@ -118,11 +118,11 @@ void LogWorker::operator()() {
 
       double age_s = -1.0;
       if (last_cmd > 0.0) {
-        age_s = now_timestamps().mono_s - last_cmd;
+        age_s = utils::now().mono_s - last_cmd;
       }
 
       logger::info() << "[HEALTH] drops: state=" << sd2
-                     << " action=" << ad2
+                     << " cmd=" << ad2
                      << " event=" << ed2
                      << " sys_event=" << xd2
                      << " q(event)=" << eqd2

@@ -297,21 +297,15 @@ int main(int argc, char *argv[])
     uint32_t seq = 0;
 
     while (g_run.load()) {
-      connection::wire::CmdPayload cmd{};
+      connection::wire::MotorCmdPayload cmd{};
       cmd.seq = ++seq;
 
-      cmd.actions.motors.m1 = static_cast<int16_t>(config.m1);
-      cmd.actions.motors.m2 = static_cast<int16_t>(config.m2);
-      cmd.actions.motors.m3 = static_cast<int16_t>(config.m3);
-      cmd.actions.motors.m4 = static_cast<int16_t>(config.m4);
+      cmd.motors.m1 = static_cast<int16_t>(config.m1);
+      cmd.motors.m2 = static_cast<int16_t>(config.m2);
+      cmd.motors.m3 = static_cast<int16_t>(config.m3);
+      cmd.motors.m4 = static_cast<int16_t>(config.m4);
 
-      const int beep_ms = std::clamp(config.beep_ms, 0, 255);
-      const uint32_t flags = static_cast<uint32_t>(std::clamp(config.flags & 0xFFu, 0u, 255u));
-
-      cmd.actions.beep_ms = static_cast<uint8_t>(beep_ms);
-      cmd.actions.flags   = static_cast<uint8_t>(flags);
-
-      std::array<uint8_t, connection::wire::kCmdPayloadSize> cbuf{};
+      std::array<uint8_t, connection::wire::kMotorCmdPayloadSize> cbuf{};
       connection::wire::encode_cmd_payload(cbuf, cmd);
       if (!send_frame(cmd_sock, connection::MSG_CMD, cbuf.data(), static_cast<uint8_t>(cbuf.size()))) {
         logger::warn() << "[TCP_CLIENT] CMD send failed -> disconnect.\n";

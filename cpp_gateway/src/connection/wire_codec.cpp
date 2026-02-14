@@ -36,30 +36,26 @@ bool encode_states_payload(std::span<uint8_t> out, uint32_t seq, float t_mono_s,
   return (o == kStatesPayloadSize);
 }
 
-bool encode_cmd_payload(std::span<uint8_t> out, const CmdPayload& p) noexcept {
-  if (out.size() != kCmdPayloadSize) return false;
+bool encode_cmd_payload(std::span<uint8_t> out, const MotorCmdPayload& p) noexcept {
+  if (out.size() != kMotorCmdPayloadSize) return false;
   size_t o = 0;
   write_u32_le(out.data()+o, p.seq); o+=4;
-  write_i16_le(out.data()+o, p.actions.motors.m1); o+=2;
-  write_i16_le(out.data()+o, p.actions.motors.m2); o+=2;
-  write_i16_le(out.data()+o, p.actions.motors.m3); o+=2;
-  write_i16_le(out.data()+o, p.actions.motors.m4); o+=2;
-  out[o++] = p.actions.beep_ms;
-  out[o++] = p.actions.flags;
-  return (o == kCmdPayloadSize);
+  write_i16_le(out.data()+o, p.motors.m1); o+=2;
+  write_i16_le(out.data()+o, p.motors.m2); o+=2;
+  write_i16_le(out.data()+o, p.motors.m3); o+=2;
+  write_i16_le(out.data()+o, p.motors.m4); o+=2;
+  return (o == kMotorCmdPayloadSize);
 }
 
-bool decode_cmd_payload(std::span<const uint8_t> in, CmdPayload& out) noexcept {
-  if (in.size() != kCmdPayloadSize) return false;
+bool decode_cmd_payload(std::span<const uint8_t> in, MotorCmdPayload& out) noexcept {
+  if (in.size() != kMotorCmdPayloadSize) return false;
   size_t o = 0;
   out.seq = read_u32_le(in.data()+o); o+=4;
-  out.actions.motors.m1 = read_i16_le(in.data()+o); o+=2;
-  out.actions.motors.m2 = read_i16_le(in.data()+o); o+=2;
-  out.actions.motors.m3 = read_i16_le(in.data()+o); o+=2;
-  out.actions.motors.m4 = read_i16_le(in.data()+o); o+=2;
-  out.actions.beep_ms = in[o++];
-  out.actions.flags   = in[o++];
-  return (o == kCmdPayloadSize);
+  out.motors.m1 = read_i16_le(in.data()+o); o+=2;
+  out.motors.m2 = read_i16_le(in.data()+o); o+=2;
+  out.motors.m3 = read_i16_le(in.data()+o); o+=2;
+  out.motors.m4 = read_i16_le(in.data()+o); o+=2;
+  return (o == kMotorCmdPayloadSize);
 }
 
 bool encode_setpoint_payload(std::span<uint8_t> out, const SetpointPayload& p) noexcept {
@@ -111,7 +107,7 @@ bool encode_stats_payload(std::span<uint8_t> out, const StatsPayload& p) noexcep
   write_f32_le(out.data()+o, p.tcp_hz); o+=4;
   write_f32_le(out.data()+o, p.ctrl_hz); o+=4;
   write_u32_le(out.data()+o, p.drops_state); o+=4;
-  write_u32_le(out.data()+o, p.drops_action); o+=4;
+  write_u32_le(out.data()+o, p.drops_cmd); o+=4;
   write_u32_le(out.data()+o, p.drops_event); o+=4;
   write_u32_le(out.data()+o, p.drops_sys_event); o+=4;
   write_u32_le(out.data()+o, p.tcp_frames_bad); o+=4;
@@ -131,7 +127,7 @@ bool decode_stats_payload(std::span<const uint8_t> in, StatsPayload& p) noexcept
   p.tcp_hz = read_f32_le(in.data()+o); o+=4;
   p.ctrl_hz = read_f32_le(in.data()+o); o+=4;
   p.drops_state = read_u32_le(in.data()+o); o+=4;
-  p.drops_action = read_u32_le(in.data()+o); o+=4;
+  p.drops_cmd = read_u32_le(in.data()+o); o+=4;
   p.drops_event = read_u32_le(in.data()+o); o+=4;
   p.drops_sys_event = read_u32_le(in.data()+o); o+=4;
   p.tcp_frames_bad = read_u32_le(in.data()+o); o+=4;

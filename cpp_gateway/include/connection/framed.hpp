@@ -109,7 +109,7 @@ namespace connection
       }
 
       // optional semantic sanity: some types must have payload
-      if (len == 0 && (h.type == MSG_SETPOINT || h.type == MSG_CONFIG || h.type == MSG_STATS_RESP))
+      if (len == 0 && (h.type == MSG_CMD || h.type == MSG_SETPOINT || h.type == MSG_CONFIG || h.type == MSG_STATS_RESP))
       {
         ++read_pos_;
         maybe_compact();

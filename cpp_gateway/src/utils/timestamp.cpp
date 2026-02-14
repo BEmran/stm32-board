@@ -13,18 +13,12 @@ core::Timestamps now() noexcept {
 
 double epoch_now() noexcept {
     using namespace std::chrono;
-    auto now = system_clock::now();
-    auto duration = now.time_since_epoch();
-    return duration_cast<std::chrono::duration<double>>(duration).count();
-           
+    return duration<double>(system_clock::now().time_since_epoch()).count();
 }
 
 double monotonic_now() noexcept {
     using namespace std::chrono;
-    static const steady_clock::time_point t0 = steady_clock::now();
-    return duration_cast<std::chrono::duration<double>>(
-        steady_clock::now() - t0
-    ).count();
+    return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
 std::string timestamp_string(std::string_view fmt) {

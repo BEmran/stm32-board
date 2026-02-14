@@ -29,7 +29,7 @@ static inline void push_sys_event(SharedState& sh, uint32_t seq, uint8_t bit_ind
   sh.sys_event_q.push_overwrite(ev);
 
   EventSample es{};
-  es.ts = now_timestamps();
+  es.ts = utils::now();
   es.ev = ev;
   sh.sys_event_ring.push_overwrite(es);
 }
@@ -51,7 +51,7 @@ static inline void emit_config_applied(SharedState& sh, uint32_t seq, uint8_t ke
   sh.sys_event_q.push_overwrite(ev);
 
   EventSample es{};
-  es.ts = now_timestamps();
+  es.ts = utils::now();
   es.ev = ev;
   sh.sys_event_ring.push_overwrite(es);
 }
@@ -122,7 +122,7 @@ static connection::wire::StatsPayload build_stats(SharedState& sh, uint32_t seq)
   connection::wire::StatsPayload s{};
   s.seq = seq;
 
-  const double now_mono = now_timestamps().mono_s;
+  const double now_mono = utils::now().mono_s;
   s.uptime_ms = static_cast<uint32_t>( (now_mono - sh.start_mono_s) * 1000.0 );
 
   if (auto cfg = sh.cfg.load(std::memory_order_acquire)) {
@@ -132,7 +132,7 @@ static connection::wire::StatsPayload build_stats(SharedState& sh, uint32_t seq)
   }
 
   s.drops_state     = static_cast<uint32_t>(sh.state_ring.drops());
-  s.drops_action    = static_cast<uint32_t>(sh.action_ring.drops());
+  s.drops_cmd    = static_cast<uint32_t>(sh.cmd_ring.drops());
   s.drops_event     = static_cast<uint32_t>(sh.event_ring.drops());
   s.drops_sys_event = static_cast<uint32_t>(sh.sys_event_ring.drops());
   s.tcp_frames_bad  = sh.tcp_frames_bad.load(std::memory_order_relaxed);
@@ -178,8 +178,7 @@ void TcpWorker::operator()() {
   connection::FrameRx cmd_frx;
 
   // Tracking for legacy CMD beep/event edges
-  uint32_t last_cmd_seq = 0;
-  uint8_t  last_cmd_flags = 0;
+  uint32_t last_motor_cmd_seq = 0;
 
   uint32_t last_sp_seq = 0;
 
@@ -237,40 +236,17 @@ void TcpWorker::operator()() {
       std::vector<uint8_t> payload;
       while (cmd_frx.pop(type, payload)) {
         progressed = true;
-        const double now_mono = now_timestamps().mono_s;
+        const double now_mono = utils::now().mono_s;
 
         if (type == connection::MSG_CMD) {
-          connection::wire::CmdPayload cp{};
+          connection::wire::MotorCmdPayload cp{};
           if (!connection::wire::decode_cmd_payload(payload, cp)) {
             sh_.tcp_frames_bad.fetch_add(1, std::memory_order_relaxed);
             continue;
           }
 
           sh_.last_cmd_rx_mono_s.store(now_mono, std::memory_order_release);
-
-          // Beep is one-shot based on seq (do not replay forever)
-          if (cp.seq != last_cmd_seq) {
-            if (cp.actions.beep_ms != 0) {
-              push_hw_beep_event(sh_, cp.seq, cp.actions.beep_ms);
-              // Clear beep so it doesn't repeat as continuous command.
-              cp.actions.beep_ms = 0;
-            }
-
-            // Rising-edge events for flags (continuous flags are handled by controller/USB)
-            const uint8_t rises = rising_edges(last_cmd_flags, cp.actions.flags);
-            if (rises != 0) {
-              const uint8_t mask = (sh_.cfg.load(std::memory_order_acquire) ? sh_.cfg.load(std::memory_order_acquire)->flag_event_mask : 0x07);
-              const uint8_t eff = static_cast<uint8_t>(rises & mask);
-              for (uint8_t b = 0; b < 8; ++b) {
-                if (eff & (1u << b)) push_sys_event(sh_, cp.seq, b, cp.actions.flags);
-              }
-            }
-
-            last_cmd_seq = cp.seq;
-            last_cmd_flags = cp.actions.flags;
-          }
-
-          sh_.latest_remote_cmd.store(cp.actions);
+          sh_.latest_remote_motor_cmd.store(cp.motors);
         }
         else if (type == connection::MSG_SETPOINT) {
           connection::wire::SetpointPayload sp{};
@@ -326,7 +302,7 @@ void TcpWorker::operator()() {
     // ---- Publish STATE frames ----
     auto st_opt = sh_.latest_state.load();
     if (st_opt) {
-      const float t_mono_s = static_cast<float>(now_timestamps().mono_s);
+      const float t_mono_s = static_cast<float>(utils::now().mono_s);
 
       const auto hdr = connection::make_hdr(connection::MSG_STATE,
                                             static_cast<uint8_t>(connection::wire::kStatesPayloadSize));

@@ -126,7 +126,7 @@ Offset | Field | Type
 12 | `tcp_hz` | `float32`
 16 | `ctrl_hz` | `float32`
 20 | `drops_state` | `uint32`
-24 | `drops_action` | `uint32`
+24 | `drops_cmd` | `uint32`
 28 | `drops_event` | `uint32`
 32 | `drops_sys_event` | `uint32`
 36 | `tcp_frames_bad` | `uint32`

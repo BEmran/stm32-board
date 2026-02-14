@@ -149,19 +149,17 @@ namespace utils
         return file_.good();
     }
 
-    CSVRow CSVActionsRecorder::actions_to_row(
+    CSVRow CSVCommandRecorder::motor_cmd_to_row(
         const core::Timestamps &ts,
-        const core::Actions &actions) const
+        const core::MotorCommands &cmd) const
     {
         return {
             {"t_epoch_s", format_value(ts.epoch_s, 6)},
             {"t_mono_s", format_value(ts.mono_s, 6)},
-            {"m1", format_value(actions.motors.m1)},
-            {"m2", format_value(actions.motors.m2)},
-            {"m3", format_value(actions.motors.m3)},
-            {"m4", format_value(actions.motors.m4)},
-            {"beep_ms", format_value(actions.beep_ms)},
-            {"flags", format_value(actions.flags)}};
+            {"m1", format_value(cmd.m1)},
+            {"m2", format_value(cmd.m2)},
+            {"m3", format_value(cmd.m3)},
+            {"m4", format_value(cmd.m4)}};
     }
 
     CSVRow CSVStatesRecorder::state_to_row(
@@ -189,7 +187,7 @@ namespace utils
             {"enc4", format_value(state.enc.e4)}};
     }
 
-    bool CSVActionsRecorder::record_actions(const core::Timestamps &ts, const core::Actions &actions)
+    bool CSVCommandRecorder::record_motor_cmd(const core::Timestamps &ts, const core::MotorCommands &cmd)
     {
         if (!is_open())
         {
@@ -197,7 +195,7 @@ namespace utils
             return false;
         }
 
-        auto row = actions_to_row(ts, actions);
+        auto row = motor_cmd_to_row(ts, cmd);
         return write_row(row);
     }
 

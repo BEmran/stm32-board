@@ -76,7 +76,7 @@ void UsbWorker::operator()() {
   }
   bot.set_auto_report_state(true, false);
 
-  uint32_t local_action_seq = 0;
+  uint32_t local_cmd_seq = 0;
   uint32_t state_seq = 0;
 
   auto stop_motors_burst = [&]() {
@@ -95,16 +95,18 @@ void UsbWorker::operator()() {
     cfg_ptr = sh_.cfg.load(std::memory_order_acquire);
     const double usb_hz = cfg_ptr ? cfg_ptr->usb_hz : 200.0;
 
-    const auto ts = now_timestamps();
+    const auto ts = utils::now();
     const double now_mono = ts.mono_s;
 
-    core::Actions act = sh_.latest_action_request.load_or_default();
+    core::MotorCommands cmd = sh_.latest_motor_command_request.load_or_default();
 
     // Safety: if system not running -> zero motors.
     const auto sys = sh_.system_state.load_or_default();
     if (!sys.running) {
-      act.motors = {};
-      act.beep_ms = 0;
+      cmd.m1 = 0;
+      cmd.m2 = 0;
+      cmd.m3 = 0;
+      cmd.m4 = 0;
     }
 
     // P0 safety: USB-side watchdog is mandatory.
@@ -118,8 +120,10 @@ void UsbWorker::operator()() {
 
     const bool timed_out = !cmd_fresh;
     if (timed_out) {
-      act.motors = {};
-      act.beep_ms = 0;
+      cmd.m1 = 0;
+      cmd.m2 = 0;
+      cmd.m3 = 0;
+      cmd.m4 = 0;
 
       // throttle warning logs (1 Hz)
       if ((!was_timeout) || (now_mono - last_timeout_log_mono) >= 1.0) {
@@ -131,7 +135,7 @@ void UsbWorker::operator()() {
     was_timeout = timed_out;
 
     // Apply continuous motors only.
-    if (!bot.set_motor(act.motors.m1, act.motors.m2, act.motors.m3, act.motors.m4)) {
+    if (!bot.set_motor(cmd.m1, cmd.m2, cmd.m3, cmd.m4)) {
       sh_.serial_errors.fetch_add(1, std::memory_order_relaxed);
       logger::error() << "[USB] set_motor() failed. USB mandatory => stopping.\n";
       stop_.request_stop();
@@ -163,13 +167,12 @@ void UsbWorker::operator()() {
     ss.st = st;
     sh_.state_ring.push_overwrite(ss);
 
-    // Log applied action (beep removed from continuous action log).
-    ActionSample as{};
+    // Log applied cmd
+    MotorCommandsSample as{};
     as.ts = ts;
-    as.seq = ++local_action_seq;
-    as.act = act;
-    as.act.beep_ms = 0;
-    sh_.action_ring.push_overwrite(as);
+    as.seq = ++local_cmd_seq;
+    as.motors = cmd;
+    sh_.cmd_ring.push_overwrite(as);
 
     rl.set_hz(usb_hz);
     rl.sleep();

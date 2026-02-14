@@ -19,7 +19,7 @@ static void print_help(const char* argv0) {
     << "Naming:\n"
     << "  Output files are named as:\n"
     << "    <out_dir>/<prefix><stamp>_state.csv\n"
-    << "    <out_dir>/<prefix><stamp>_action.csv\n"
+    << "    <out_dir>/<prefix><stamp>_cmd.csv\n"
     << "    <out_dir>/<prefix><stamp>_event.csv\n"
     << "\n"
     << "  <stamp> is derived from the input filename by default:\n"
@@ -84,7 +84,7 @@ static std::string normalize_prefix(std::string_view pfx) {
 static const char* record_type_name(utils::RecordType t) {
   switch (t) {
     case utils::RecordType::STATE:  return "STATE";
-    case utils::RecordType::ACTION: return "ACTION";
+    case utils::RecordType::CMD: return "ACTION";
     case utils::RecordType::EVENT:  return "EVENT";
     default: return "UNKNOWN";
   }
@@ -179,18 +179,18 @@ int main(int argc, char** argv) {
 
   // Open CSV outputs with prefix + stamp by default
   const std::string state_path  = path_join(out_dir, out_name("_state.csv"));
-  const std::string action_path = path_join(out_dir, out_name("_action.csv"));
+  const std::string cmd_path = path_join(out_dir, out_name("_cmd.csv"));
   const std::string event_path  = path_join(out_dir, out_name("_event.csv"));
 
   std::ofstream state_csv(state_path);
-  std::ofstream action_csv(action_path);
+  std::ofstream cmd_csv(cmd_path);
   std::ofstream event_csv(event_path);
 
-  if (!state_csv.is_open() || !action_csv.is_open() || !event_csv.is_open()) {
+  if (!state_csv.is_open() || !cmd_csv.is_open() || !event_csv.is_open()) {
     logger::error() << "Failed to open output CSV(s) in dir: " << out_dir << "\n";
     logger::error() << "Tried:\n"
                    << "  " << state_path  << "\n"
-                   << "  " << action_path << "\n"
+                   << "  " << cmd_path << "\n"
                    << "  " << event_path  << "\n";
     return 1;
   }
@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
     << "e1,e2,e3,e4,"
     << "battery_voltage\n";
 
-  action_csv
+  cmd_csv
     << "epoch_s,mono_s,seq,"
     << "m1,m2,m3,m4,"
     << "beep_ms,flags\n";
@@ -258,19 +258,17 @@ int main(int argc, char** argv) {
         << s.st.battery_voltage
         << "\n";
     }
-    else if (rtype == utils::RecordType::ACTION) {
-      if (payload_len != sizeof(workers::ActionSample)) {
+    else if (rtype == utils::RecordType::CMD) {
+      if (payload_len != sizeof(workers::MotorCommandsSample)) {
         ++n_skipped;
         continue;
       }
-      workers::ActionSample a{};
-      std::memcpy(&a, payload.data(), sizeof(a));
+      workers::MotorCommandsSample cmd{};
+      std::memcpy(&cmd, payload.data(), sizeof(cmd));
 
-      action_csv
-        << rh.epoch_s << "," << rh.mono_s << "," << a.seq << ","
-        << a.act.motors.m1 << "," << a.act.motors.m2 << "," << a.act.motors.m3 << "," << a.act.motors.m4 << ","
-        << static_cast<unsigned>(a.act.beep_ms) << ","
-        << static_cast<unsigned>(a.act.flags)
+      cmd_csv
+        << rh.epoch_s << "," << rh.mono_s << "," << cmd.seq << ","
+        << cmd.motors.m1 << "," << cmd.motors.m2 << "," << cmd.motors.m3 << "," << cmd.motors.m4
         << "\n";
     }
     else if (rtype == utils::RecordType::EVENT) {
@@ -302,7 +300,7 @@ int main(int argc, char** argv) {
                  << " (unknown/size-mismatch).\n"
                  << "Outputs:\n"
                  << "  " << state_path  << "\n"
-                 << "  " << action_path << "\n"
+                 << "  " << cmd_path << "\n"
                  << "  " << event_path  << "\n";
   return 0;
 }

@@ -35,7 +35,7 @@ void ControllerWorker::operator()() {
 
     // Read snapshots
     const core::States st = sh_.latest_state.load_or_default();
-    const core::Actions remote_cmd = sh_.latest_remote_cmd.load_or_default();
+    const core::MotorCommands remote_cmd = sh_.latest_remote_motor_cmd.load_or_default();
     const connection::wire::SetpointPayload sp = sh_.latest_setpoint_cmd.load_or_default();
 
     auto sys = sh_.system_state.load_or_default();
@@ -58,10 +58,8 @@ void ControllerWorker::operator()() {
         // conservative reset behavior: stop + clear continuous commands
         sys.running = false;
 
-        core::Actions zero{};
-        zero.beep_ms = 0;
-        zero.flags = 0;
-        sh_.latest_remote_cmd.store(zero);
+        core::MotorCommands zero{};
+        sh_.latest_remote_motor_cmd.store(zero);
 
         connection::wire::SetpointPayload zsp{};
         sh_.latest_setpoint_cmd.store(zsp);
@@ -71,7 +69,7 @@ void ControllerWorker::operator()() {
     // Cmd timeout enforcement
     bool cmd_timeout_active = false;
     if (cfg_ptr && cfg_ptr->usb_timeout_mode == gateway::UsbTimeoutMode::ENFORCE) {
-      const double now_mono = now_timestamps().mono_s;
+      const double now_mono = utils::now().mono_s;
       const double last_rx = sh_.last_cmd_rx_mono_s.load(std::memory_order_acquire);
       if (last_rx > 0.0 && (now_mono - last_rx) > cfg_ptr->cmd_timeout_s) {
         cmd_timeout_active = true;
@@ -85,49 +83,46 @@ void ControllerWorker::operator()() {
       }
     }
 
-    // Compute desired action
-    core::Actions out{};
-    out.beep_ms = 0;                 // never continuous
-    out.flags   = sys.continuous_flags;
+    // Compute desired cmd
+    core::MotorCommands out{};
 
     if (!sys.running || cmd_timeout_active) {
-      out.motors = {};
+      out = {};
     } else {
       switch (sys.control_mode) {
         case gateway::ControlMode::PASS_THROUGH_CMD:
           out = remote_cmd;
-          out.beep_ms = 0;
-          out.flags = sys.continuous_flags;
           break;
 
         case gateway::ControlMode::AUTONOMOUS:
           (void)st;
-          out.motors = {}; // placeholder OK
+          out = {}; // placeholder OK
           break;
 
         case gateway::ControlMode::AUTONOMOUS_WITH_REMOTE_SETPOINT:
           // Placeholder controller – preserves dataflow: st + sp available here.
           (void)st;
           (void)sp;
-          out.motors = {}; // placeholder OK
+          out = {}; // placeholder OK
           break;
       }
     }
 
     sh_.system_state.store(sys);
-    sh_.latest_action_request.store(out);
+    sh_.latest_motor_command_request.store(out);
 
     rl.set_hz(ctrl_hz); rl.sleep();
   }
 
 
-// Safety: ensure the last published action is a "motors off" command so that
+// Safety: ensure the last published cmd is a "motors off" command so that
 // the USB worker will send a safe command even during shutdown.
-core::Actions zero{};
-zero.motors = {};
-zero.beep_ms = 0;
-zero.flags = 0;
-sh_.latest_action_request.store(zero);
+core::MotorCommands zero{};
+zero.m1 = 0;
+zero.m2 = 0;
+zero.m3 = 0;
+zero.m4 = 0;
+sh_.latest_motor_command_request.store(zero);
 
   logger::info() << "[CTRL] Stopped.\n";
 }

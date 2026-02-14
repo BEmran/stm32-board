@@ -53,14 +53,6 @@ namespace core
     int16_t m4{0};
   };
 
-  // Actions structure (commands sent to robot)
-  struct Actions
-  {
-    MotorCommands motors;
-    uint8_t beep_ms{0};
-    uint8_t flags{0};
-  };
-
   // Timestamp pair (wall clock and monotonic)
   struct Timestamps
   {
@@ -78,11 +70,6 @@ namespace core
    constexpr Vec3d scale_vec3d(const Vec3d &in, float scale) noexcept
   {
     return {in.x * scale, in.y * scale, in.z * scale};
-  }
-
-   constexpr Vec3d rearrange_gyro(const Vec3d &in) noexcept
-  {
-    return {in.x, -in.y, -in.z};
   }
 
 } // namespace core

@@ -133,7 +133,6 @@ int main(int argc, char** argv) {
   workers::SystemState sys{};
   sys.running = true; // default armed; you can set false if you want "start" event to arm
   sys.control_mode = cfg->control_mode;
-  sys.continuous_flags = 0;
   sh.system_state.store(sys);
 
   gateway::StopFlag stop;

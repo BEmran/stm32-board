@@ -123,9 +123,9 @@ int main(int argc, char **argv) {
   std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-  utils::CSVActionsRecorder actions_recorder(RECORDER_PATH);
+  utils::CSVCommandRecorder commands_recorder(RECORDER_PATH);
   utils::CSVStatesRecorder states_recorder(RECORDER_PATH);
-  if (!actions_recorder.open() || !states_recorder.open()) {
+  if (!commands_recorder.open() || !states_recorder.open()) {
     logger::error() << "[TCP_GW] Failed to open CSV recorders\n";
     return 1;
   }
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
   const auto t0 = clock::now();
   auto next = clock::now();
 
-  connection::CmdPkt last_cmd{};
+  connection::MotorCmdPkt last_cmd{};
   bool have_cmd = false;
   bool last_cmd_valid = false;
   auto last_cmd_time = clock::now();
@@ -230,7 +230,7 @@ int main(int argc, char **argv) {
           uint8_t type = 0;
           std::vector<uint8_t> payload;
           while (cmd_frx.pop(type, payload)) {
-            if (type == connection::MSG_CMD && payload.size() == sizeof(connection::CmdPkt)) {
+            if (type == connection::MSG_CMD && payload.size() == sizeof(connection::MotorCmdPkt)) {
               std::memcpy(&last_cmd, payload.data(), sizeof(last_cmd));
               have_cmd = true;
               last_cmd_time = clock::now();
@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
     const bool do_print = print.check();
 
     if (cmd_valid) {
-      bot.apply_actions(last_cmd.actions);
+      bot.apply_motor_cmd(last_cmd.motors);
 
       if (!last_cmd_valid)
         logger::info() << "[TCP_GW] CMD valid.\n";
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
       if (do_print) {
         logger::info()
             << "[TCP_GW] CMD " << helpper::to_string(last_cmd) << "\n";
-        actions_recorder.record_actions(utils::now(), last_cmd.actions);
+        commands_recorder.record_motor_cmd(utils::now(), last_cmd.motors);
       }
     } else {
       if (last_cmd_valid) {

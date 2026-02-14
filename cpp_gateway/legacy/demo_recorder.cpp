@@ -31,31 +31,31 @@ int main() {
   logger::debug() << "Version: " << bot.get_version() << "\n";
 
   // Create recorder
-  utils::CSVActionsRecorder actions_recorder(RECORDER_PATH);
+  utils::CSVCommandRecorder commands_recorder(RECORDER_PATH);
   utils::CSVStatesRecorder state_recorder(RECORDER_PATH);
   
   // Open the recorder
-  if (!actions_recorder.open() or !state_recorder.open()) {
+  if (!commands_recorder.open() or !state_recorder.open()) {
       logger::error() << "Failed to open recorder\n";
       return EXIT_FAILURE;
   }
   helpper::Print print_info(PRINT_DURATION);
   
-  // Simulate recording actions
+  // Simulate recording command
   while (true) {
       const auto state = bot.get_state();
-      core::Actions actions{};
+      core::MotorCommands cmd{};
       const auto ts = utils::now();
-      actions_recorder.record_actions(ts, actions);
+      commands_recorder.record_motor_cmd(ts, cmd);
       state_recorder.record_state(ts, state);
       if (print_info.check()) {
-        logger::info() << "states and actions are logged, up time = " << utils::monotonic_now();
+        logger::info() << "states and command are logged, up time = " << utils::monotonic_now();
       }
       std::this_thread::sleep_for(100ms);
   }
 
-  actions_recorder.close();
+  commands_recorder.close();
   state_recorder.close();
-  logger::debug() << "Actions saved to: " << actions_recorder.path() << " and " << state_recorder.path() << "\n";
+  logger::debug() << "Actions saved to: " << commands_recorder.path() << " and " << state_recorder.path() << "\n";
 }
 

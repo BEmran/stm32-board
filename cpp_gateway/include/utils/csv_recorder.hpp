@@ -29,8 +29,8 @@ concept Streamable = requires(std::ostream &os, const T &t) {
 // Header constants for convenience
 namespace headers
 {
-    inline const std::vector<std::string> ACTIONS = {
-        "t_epoch_s", "t_mono_s", "m1", "m2", "m3", "m4", "beep_ms", "flags"};
+    inline const std::vector<std::string> MOTORS_CMD = {
+        "t_epoch_s", "t_mono_s", "m1", "m2", "m3", "m4"};
 
     inline const std::vector<std::string> STATE = {
         "t_epoch_s", "t_mono_s",
@@ -180,26 +180,26 @@ namespace utils
      * @brief High-performance CSV recorder for robotics data logging
      *
      */
-    class CSVActionsRecorder : public CSVRecorder
+    class CSVCommandRecorder : public CSVRecorder
     {
     public:
-        CSVActionsRecorder(std::string_view path, std::string_view prefix = "actions")
-            : CSVRecorder(std::filesystem::path(std::string(path)), prefix, headers::ACTIONS) {}
+        CSVCommandRecorder(std::string_view path, std::string_view prefix = "commands")
+            : CSVRecorder(std::filesystem::path(std::string(path)), prefix, headers::MOTORS_CMD) {}
         /**
-         * @brief Record actions data with timestamps
+         * @brief Record motor command data with timestamps
          * @param ts Timestamps
-         * @param actions Action commands
+         * @param cmd Motor commands
          * @return true if successful, false otherwise
          */
-        bool record_actions(const core::Timestamps &ts, const core::Actions &actions);
+        bool record_motor_cmd(const core::Timestamps &ts, const core::MotorCommands &cmd);
 
     private:
         /**
          * @brief Convert Actions to CSV row
          */
-         CSVRow actions_to_row(
+         CSVRow motor_cmd_to_row(
             const core::Timestamps &ts,
-            const core::Actions &actions) const;
+            const core::MotorCommands &cmd) const;
     };
 
 } // namespace utils

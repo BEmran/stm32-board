@@ -22,7 +22,7 @@ namespace connection::wire {
 
 // ---- Fixed payload sizes (bytes) ----
 inline constexpr size_t kStatesPayloadSize   = 76; // seq(u32) + t_mono_s(f32) + core::States (explicit field order)
-inline constexpr size_t kCmdPayloadSize      = 14; // seq(u32) + motors(4*i16) + beep(u8) + flags(u8)
+inline constexpr size_t kMotorCmdPayloadSize      = 12; // seq(u32) + motors(4*i16)
 inline constexpr size_t kSetpointPayloadSize = 21; // seq(u32) + sp0..sp3(f32) + flags(u8)
 inline constexpr size_t kConfigPayloadSize   = 12; // seq(u32) + key(u8) + u8 + u16 + u32
 
@@ -81,9 +81,9 @@ inline float read_f32_le(const uint8_t* in) noexcept {
 }
 
 // ---- Logical payload structs (independent of layout/padding) ----
-struct CmdPayload {
+struct MotorCmdPayload {
   uint32_t seq{0};
-  core::Actions actions{};
+  core::MotorCommands motors{};
 };
 
 struct SetpointPayload {
@@ -107,7 +107,7 @@ struct StatsPayload {
   float    tcp_hz{0.f};
   float    ctrl_hz{0.f};
   uint32_t drops_state{0};
-  uint32_t drops_action{0};
+  uint32_t drops_cmd{0};
   uint32_t drops_event{0};
   uint32_t drops_sys_event{0};
   uint32_t tcp_frames_bad{0};
@@ -118,8 +118,8 @@ struct StatsPayload {
 // ---- Encoders (return false if span has wrong size) ----
 bool encode_states_payload(std::span<uint8_t> out, uint32_t seq, float t_mono_s, const core::States& st) noexcept;
 
-bool encode_cmd_payload(std::span<uint8_t> out, const CmdPayload& p) noexcept;
-bool decode_cmd_payload(std::span<const uint8_t> in, CmdPayload& out) noexcept;
+bool encode_cmd_payload(std::span<uint8_t> out, const MotorCmdPayload& p) noexcept;
+bool decode_cmd_payload(std::span<const uint8_t> in, MotorCmdPayload& out) noexcept;
 
 bool encode_setpoint_payload(std::span<uint8_t> out, const SetpointPayload& p) noexcept;
 bool decode_setpoint_payload(std::span<const uint8_t> in, SetpointPayload& out) noexcept;

@@ -17,7 +17,7 @@ namespace connection {
  */
 
 using StatesPayloadBytes   = std::array<uint8_t, wire::kStatesPayloadSize>;
-using CmdPayloadBytes      = std::array<uint8_t, wire::kCmdPayloadSize>;
+using MotorCmdPayloadBytes = std::array<uint8_t, wire::kMotorCmdPayloadSize>;
 using SetpointPayloadBytes = std::array<uint8_t, wire::kSetpointPayloadSize>;
 using ConfigPayloadBytes   = std::array<uint8_t, wire::kConfigPayloadSize>;
 using StatsPayloadBytes    = std::array<uint8_t, wire::kStatsPayloadSize>;

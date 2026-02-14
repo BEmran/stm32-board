@@ -5,23 +5,20 @@
 
 int main() {
   // Cmd encode/decode roundtrip
-  connection::wire::CmdPayload c{};
-  c.seq = 42;
-  c.actions.motors.m1 = -10;
-  c.actions.motors.m2 = 20;
-  c.actions.motors.m3 = 30;
-  c.actions.motors.m4 = 40;
-  c.actions.beep_ms = 7;
-  c.actions.flags = 0xA5;
+  connection::wire::MotorCmdPayload cmd{};
+  cmd.seq = 42;
+  cmd.motors.m1 = -10;
+  cmd.motors.m2 = 20;
+  cmd.motors.m3 = 30;
+  cmd.motors.m4 = 40;
 
-  std::array<uint8_t, connection::wire::kCmdPayloadSize> buf{};
-  assert(connection::wire::encode_cmd_payload(buf, c));
+  std::array<uint8_t, connection::wire::kMotorCmdPayloadSize> buf{};
+  assert(connection::wire::encode_cmd_payload(buf, cmd));
 
-  connection::wire::CmdPayload out{};
+  connection::wire::MotorCmdPayload out{};
   assert(connection::wire::decode_cmd_payload(buf, out));
-  assert(out.seq == c.seq);
-  assert(out.actions.motors.m1 == c.actions.motors.m1);
-  assert(out.actions.flags == c.actions.flags);
+  assert(out.seq == cmd.seq);
+  assert(out.motors.m1 == cmd.motors.m1);
 
   // States encode size check
   core::States st{};

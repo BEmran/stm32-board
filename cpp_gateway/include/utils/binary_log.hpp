@@ -5,10 +5,10 @@
 
 namespace utils {
 
-// Required record types exactly: STATE, ACTION, EVENT
+// Required record types exactly: STATE, CMD, EVENT
 enum class RecordType : uint8_t {
   STATE  = 1,
-  ACTION = 2,
+  CMD = 2,
   EVENT  = 3,
 };
 
@@ -36,7 +36,6 @@ public:
   bool open(std::string_view path);
   void close();
   bool is_open() const noexcept { return out_.is_open(); }
-
   bool write_record(const RecordHeader& h, const void* payload, uint16_t n);
 
 private:

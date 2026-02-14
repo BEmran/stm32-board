@@ -22,6 +22,10 @@ namespace {
     vec.z = utils::le_i16(d+4);
     return vec;
   }
+  constexpr core::Vec3d rearrange_gyro(const core::Vec3d &in) noexcept
+  {
+    return {in.x, -in.y, -in.z};
+  }
 }
 
 Rosmaster::Rosmaster()
@@ -74,9 +78,8 @@ core::States Rosmaster::get_state() const {
   return st_;
 }
 
-bool Rosmaster::apply_actions(const core::Actions& actions) {
-  return set_beep(actions.beep_ms) &&
-         set_motor(actions.motors.m1, actions.motors.m2, actions.motors.m3, actions.motors.m4);
+bool Rosmaster::apply_motor_cmd(const core::MotorCommands& cmd) {
+  return set_motor(cmd.m1, cmd.m2, cmd.m3, cmd.m4);
 }
 
 int Rosmaster::clamp_int(int v, int lo, int hi) {
@@ -192,7 +195,7 @@ void Rosmaster::parse_payload(uint8_t ext_type, const uint8_t* d, size_t n) {
   }
 
   if (ext_type == FUNC_REPORT_MPU_RAW && n >= 18) {
-    st_.imu.gyro = core::scale_vec3d(core::rearrange_gyro(parse_vec3d(d)), GYRO_RATIO);
+    st_.imu.gyro = core::scale_vec3d(rearrange_gyro(parse_vec3d(d)), GYRO_RATIO);
     st_.imu.acc = core::scale_vec3d(parse_vec3d(d+6), ACCEL_RATIO);
     st_.imu.mag = core::scale_vec3d(parse_vec3d(d+12), MAG_RATIO);
     return;
